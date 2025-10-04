@@ -33,32 +33,124 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
 
 func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String) {
-    //check if reminder already exists
-    //if reminder does not exist,
     let content = UNMutableNotificationContent()
     content.title = title
     content.body = description
-    //content.sound = UNNotificationSound.default
-    if soundType == "Alert" {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+    content.sound = soundType == "Alert" 
+        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+    
+    let calendar = Calendar.current
+    let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
+    
+    if repeat_type == "Custom", let repeatIntervals = repeatIntervals, let daysString = repeatIntervals.days {
+        // Handle custom repeat patterns
+        let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+        
+        for (index, pattern) in patterns.enumerated() {
+            if let nextDate = calculateNextDateForPattern(pattern: pattern, from: dateAndTime) {
+                let dateComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: nextDate)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+                let identifier = "\(baseIdentifier)-\(index)"
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                
+                UNUserNotificationCenter.current().add(request) { error in
+                    if let error = error {
+                        print("Error adding custom notification: \(error)")
+                    } else {
+                        print("Scheduled custom notification for \(nextDate)")
+                    }
+                }
+            }
+        }
     } else {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
-
-    }
-    var shouldRepeat: Bool = false
-
-    let dateComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dateAndTime)
-    
-    let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: shouldRepeat)
-    let request = UNNotificationRequest(identifier: createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)), content: content, trigger: trigger)
-    
-    UNUserNotificationCenter.current().add(request) { error in
-        if let error = error {
-            print("Error adding notification: \(error)")
+        // Handle regular notifications
+        if repeat_type == "Daily" {
+            let dateComponents = calendar.dateComponents([.hour, .minute], from: dateAndTime)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Error adding daily notification: \(error)")
+                } else {
+                    print("Successfully added daily notification")
+                }
+            }
+        } else if repeat_type == "Weekly" {
+            let dateComponents = calendar.dateComponents([.weekday, .hour, .minute], from: dateAndTime)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Error adding weekly notification: \(error)")
+                } else {
+                    print("Successfully added weekly notification")
+                }
+            }
         } else {
-            print("Successfully added notification for \(dateAndTime)")
+            // Non-repeating or monthly (monthly needs special handling)
+            let shouldRepeat = false
+            let dateComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: dateAndTime)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: shouldRepeat)
+            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
+            
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Error adding notification: \(error)")
+                } else {
+                    print("Successfully added notification for \(dateAndTime)")
+                }
+            }
         }
     }
+}
+
+func calculateNextDateForPattern(pattern: String, from baseDate: Date) -> Date? {
+    let calendar = Calendar.current
+    let components = pattern.split(separator: " ")
+    guard components.count == 2 else { return nil }
+    
+    let ordinal = String(components[0])
+    let dayName = String(components[1])
+    
+    // Convert day name to weekday number
+    let weekdayMap = ["Mon": 2, "Tue": 3, "Wed": 4, "Thu": 5, "Fri": 6, "Sat": 7, "Sun": 1]
+    guard let weekday = weekdayMap[dayName] else { return nil }
+    
+    // Extract ordinal number
+    let ordinalNumber: Int
+    if ordinal.hasPrefix("1st") { ordinalNumber = 1 }
+    else if ordinal.hasPrefix("2nd") { ordinalNumber = 2 }
+    else if ordinal.hasPrefix("3rd") { ordinalNumber = 3 }
+    else if ordinal.hasPrefix("4th") { ordinalNumber = 4 }
+    else { return nil }
+    
+    // Find the next occurrence
+    let baseComponents = calendar.dateComponents([.hour, .minute], from: baseDate)
+    let currentDate = Date()
+    
+    for monthOffset in 0..<12 {
+        if let targetMonth = calendar.date(byAdding: .month, value: monthOffset, to: currentDate) {
+            let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: targetMonth))!
+            
+            // Find the nth occurrence of the weekday in this month
+            var occurrenceCount = 0
+            for day in 1...31 {
+                if let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart),
+                   calendar.component(.month, from: date) == calendar.component(.month, from: targetMonth),
+                   calendar.component(.weekday, from: date) == weekday {
+                    occurrenceCount += 1
+                    if occurrenceCount == ordinalNumber {
+                        let finalDate = calendar.date(bySettingHour: baseComponents.hour ?? 0, minute: baseComponents.minute ?? 0, second: 0, of: date)!
+                        if finalDate > currentDate {
+                            return finalDate
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return nil
 }
 
 //func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String) {

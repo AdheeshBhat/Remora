@@ -167,31 +167,8 @@ func showIncompleteReminders(userID: Int, period: String, cur_screen: Binding<Sc
 
 func formattedReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = true, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [String: ReminderData], onUpdate: (() -> Void)? = nil) -> some View {
     
-    let filteredUserData = userData.filter { (documentID, reminder) in
-        let reminderDate = reminder.date
-        let calendar = Calendar.current
-        
-        if period == "today" {
-            let today = filteredDay ?? Date()
-            let startOfDay = calendar.startOfDay(for: today)
-            let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: startOfDay)!
-            return reminderDate >= startOfDay && reminderDate <= endOfDay
-        } else if period == "week" {
-            let today = filteredDay ?? Date()
-            let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
-            var endOfWeek = calendar.date(byAdding: .day, value: 6, to: startOfWeek)!
-            endOfWeek = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endOfWeek)!
-            return reminderDate >= startOfWeek && reminderDate <= endOfWeek
-        } else if period == "month" {
-            let today = filteredDay ?? Date()
-            let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
-            let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
-            return reminderDate >= startOfMonth && reminderDate <= endOfMonth
-        }
-        return true
-    }
-    
-    let sortedReminders = filteredUserData.sorted { $0.value.date < $1.value.date }
+    let expandedReminders = expandRepeatingReminders(userData: userData, period: period, filteredDay: filteredDay)
+    let sortedReminders = expandedReminders.sorted { $0.value.date < $1.value.date }
     
     return VStack {
         ForEach(sortedReminders, id: \.key) { (documentID, reminder) in
@@ -206,11 +183,94 @@ func formattedReminders(userID: Int, period: String, cur_screen: Binding<Screen>
                     showDeleteButton: showDeleteButton,
                     userID: userID,
                     dateKey: reminder.date,
-                    documentID: documentID,
+                    documentID: documentID.components(separatedBy: "-")[0],
                     firestoreManager: firestoreManager,
                     onUpdate: onUpdate
                 )
             }
         }
     }
+}
+
+func expandRepeatingReminders(userData: [String: ReminderData], period: String, filteredDay: Date?) -> [String: ReminderData] {
+    var expandedData: [String: ReminderData] = [:]
+    let calendar = Calendar.current
+    
+    // Determine date range based on period
+    let (startDate, endDate) = {
+        let today = filteredDay ?? Date()
+        switch period {
+        case "today":
+            let start = calendar.startOfDay(for: today)
+            let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: start)!
+            return (start, end)
+        case "week":
+            let start = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
+            let end = calendar.date(byAdding: .day, value: 6, to: start)!
+            return (start, calendar.date(bySettingHour: 23, minute: 59, second: 59, of: end)!)
+        case "month":
+            let start = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
+            let end = calendar.date(byAdding: .month, value: 1, to: start)!
+            return (start, end)
+        default:
+            return (today, calendar.date(byAdding: .year, value: 1, to: today)!)
+        }
+    }()
+    
+    for (documentID, reminder) in userData {
+        let repeatType = reminder.repeatSettings.repeat_type
+        
+        if repeatType == "None" {
+            // Non-repeating reminder
+            if reminder.date >= startDate && reminder.date <= endDate {
+                expandedData[documentID] = reminder
+            }
+        } else {
+            // Repeating reminder - generate instances
+            var currentDate = reminder.date
+            var instanceCount = 0
+            
+            // Find first occurrence in range
+            while currentDate < startDate && instanceCount < 1000 {
+                switch repeatType {
+                case "Daily":
+                    currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? endDate
+                case "Weekly":
+                    currentDate = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate) ?? endDate
+                case "Monthly":
+                    currentDate = calendar.date(byAdding: .month, value: 1, to: currentDate) ?? endDate
+                default:
+                    currentDate = endDate
+                }
+                instanceCount += 1
+            }
+            
+            // Generate instances within range
+            instanceCount = 0
+            while currentDate <= endDate && instanceCount < 50 {
+                var instanceReminder = reminder
+                instanceReminder.date = currentDate
+                expandedData["\(documentID)-\(instanceCount)"] = instanceReminder
+                
+                // Calculate next occurrence
+                let nextDate: Date?
+                switch repeatType {
+                case "Daily":
+                    nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate)
+                case "Weekly":
+                    nextDate = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate)
+                case "Monthly":
+                    nextDate = calendar.date(byAdding: .month, value: 1, to: currentDate)
+                default:
+                    nextDate = nil
+                }
+                
+                guard let next = nextDate, next > currentDate else { break }
+                currentDate = next
+                instanceCount += 1
+            }
+        }
+    }
+    
+    return expandedData
 }

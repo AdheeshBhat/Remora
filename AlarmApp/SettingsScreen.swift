@@ -12,7 +12,7 @@ struct SettingsScreen: View {
     @Environment(\.presentationMode) private var presentationMode
     @Binding var cur_screen: Screen
     @State private var isDropdownVisible = false
-    @State var selectedSound: String = "Chord"
+    @State var selectedSound: String = ""
     @State private var showLogoutAlert = false
     let firestoreManager: FirestoreManager
     
@@ -30,9 +30,17 @@ struct SettingsScreen: View {
         }
         .onAppear {
             cur_screen = .SettingsScreen
-            firestoreManager.loadUserSettings(field: "SelectedSound") { value in
+            loadSettings()
+        }
+    }
+    
+    private func loadSettings() {
+        firestoreManager.loadUserSettings(field: "selectedSound") { value in
+            DispatchQueue.main.async {
                 if let sound = value as? String {
                     selectedSound = sound
+                } else {
+                    selectedSound = "Chord"
                 }
             }
         }
@@ -145,8 +153,16 @@ extension SettingsScreen {
     
     private var saveSettingsButton: some View {
         Button(action: {
-            firestoreManager.saveUserSettings(field: "selectedSound", value: selectedSound)
-            presentationMode.wrappedValue.dismiss()
+            firestoreManager.saveUserSettings(field: "selectedSound", value: selectedSound) { error in
+                DispatchQueue.main.async {
+                    if error == nil {
+                        // Success - local state is already updated
+                        presentationMode.wrappedValue.dismiss()
+                    } else {
+                        print("Failed to save settings: \(error?.localizedDescription ?? "Unknown error")")
+                    }
+                }
+            }
         }) {
             Text("Save Settings")
                 .font(.title2)
