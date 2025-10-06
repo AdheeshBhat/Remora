@@ -34,38 +34,42 @@ struct TodayRemindersExperience: View {
                 Spacer()
                 ProgressView("Loading...")
                 Spacer()
-            } else if reminders.isEmpty {
-                Spacer()
-                Text("No Pending Tasks! 🙂")
-                    .font(.title)
-                    .foregroundColor(.primary)
-                Spacer()
             } else {
                 let filteredReminders = filterReminders(userData: reminders, period: "today", filteredDay: nil)
-                let visibleReminders = isHideCompletedReminders ? filteredReminders.filter { !$0.value.isComplete } : filteredReminders
-
-                ScrollView {
-                    VStack {
-                        ForEach(visibleReminders.sorted(by: { $0.value.date < $1.value.date }), id: \.key) { (documentID, reminder) in
-                            ReminderRow(
-                                cur_screen: $cur_screen,
-                                title: getTitle(reminder: reminder),
-                                time: getTimeFromReminder(reminder: reminder),
-                                reminderDate: getMonthFromReminder(reminder: reminder),
-                                reminder: reminder,
-                                showEditButton: false,
-                                showDeleteButton: false,
-                                userID: 1,
-                                dateKey: reminder.date,
-                                documentID: documentID,
-                                firestoreManager: firestoreManager,
-                                onUpdate: nil
-                            )
+                let visibleReminders = isHideCompletedReminders
+                ? filteredReminders.filter { !$0.value.isComplete }
+                : filteredReminders
+                
+                if visibleReminders.isEmpty {
+                    Spacer()
+                    Text("No pending reminders 🙂")
+                        .font(.title)
+                        .foregroundColor(.primary)
+                    Spacer()
+                } else {
+                    ScrollView {
+                        VStack {
+                            ForEach(visibleReminders.sorted(by: { $0.value.date < $1.value.date }), id: \.key) { (documentID, reminder) in
+                                ReminderRow(
+                                    cur_screen: $cur_screen,
+                                    title: getTitle(reminder: reminder),
+                                    time: getTimeFromReminder(reminder: reminder),
+                                    reminderDate: getMonthFromReminder(reminder: reminder),
+                                    reminder: reminder,
+                                    showEditButton: false,
+                                    showDeleteButton: false,
+                                    userID: 1,
+                                    dateKey: reminder.date,
+                                    documentID: documentID,
+                                    firestoreManager: firestoreManager,
+                                    onUpdate: nil
+                                )
+                            }
                         }
                     }
+                    .background(RoundedRectangle(cornerRadius: 12).stroke(Color.primary, lineWidth: 2))
+                    .padding(.horizontal)
                 }
-                .background(RoundedRectangle(cornerRadius: 12).stroke(Color.primary, lineWidth: 2))
-                .padding(.horizontal)
             }
 
             Spacer()

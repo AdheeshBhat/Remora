@@ -22,7 +22,6 @@ struct SettingsScreen: View {
             accountHeading
             notificationRow
             soundPicker
-            Spacer()
             logoutButton
             Spacer()
             saveSettingsButton

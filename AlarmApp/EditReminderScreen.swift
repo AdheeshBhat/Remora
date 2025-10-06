@@ -235,17 +235,19 @@ struct EditReminderScreen: View {
                                     
                                     // Cancel the old notification and set a new one
                                     cancelAlarm(reminderID: reminderID) // cancel using reminderID identifier (same as in createReminderScreen)
+                                    if !reminder.isComplete {
+                                        setAlarm(
+                                            dateAndTime: localDate,
+                                            title: localTitle,
+                                            description: localDescription,
+                                            repeat_type: localEditScreenRepeatSetting,
+                                            repeat_until_date: localEditScreenRepeatUntil,
+                                            repeatIntervals: customRepeatType,
+                                            reminderID: reminderID,
+                                            soundType: selectedSound
+                                        )
+                                    }
                                     
-                                    setAlarm(
-                                        dateAndTime: localDate,
-                                        title: localTitle,
-                                        description: localDescription,
-                                        repeat_type: localEditScreenRepeatSetting,
-                                        repeat_until_date: localEditScreenRepeatUntil,
-                                        repeatIntervals: customRepeatType,
-                                        reminderID: reminderID,
-                                        soundType: selectedSound
-                                    )
                                     onUpdate?()
                                 }
                             }

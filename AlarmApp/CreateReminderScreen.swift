@@ -207,7 +207,8 @@ struct CreateReminderScreen: View {
                                 repeat_type: reminder.repeatSettings.repeat_type,
                                 repeat_until_date: reminder.repeatSettings.repeat_until_date,
                                 repeatIntervals: reminder.repeatSettings.repeatIntervals,
-                                reminderID: reminderID, soundType: selectedSound
+                                reminderID: reminderID,
+                                soundType: selectedSound
                             )
                         }
                     }) {

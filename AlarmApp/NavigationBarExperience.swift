@@ -8,8 +8,6 @@
 import SwiftUI
 
 struct NavigationBarExperience: View {
-    //@Environment(\.presentationMode) var
-        //presentationMode: Binding<PresentationMode>
     @Environment(\.dismiss) var dismiss
     @Binding var cur_screen: Screen
     let firestoreManager: FirestoreManager

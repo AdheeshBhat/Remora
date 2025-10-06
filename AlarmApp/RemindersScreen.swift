@@ -184,7 +184,8 @@ struct RemindersScreen: View {
             ForEach(-6...6, id: \.self) { index in
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        formattedReminders(
+                        // Filter the reminders for the current period and date
+                        let filteredReminders = formattedReminders(
                             userID: 1,
                             period: filterPeriod,
                             cur_screen: $cur_screen,
@@ -195,6 +196,16 @@ struct RemindersScreen: View {
                             userData: remindersForUser,
                             onUpdate: loadReminders
                         )
+                        if isRemindersEmpty(for: filterPeriod, filteredDay: calculateDateFor(), reminders: remindersForUser) {
+                            Text("No reminders for this period.")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 40)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            filteredReminders
+                        }
                     }
                     .padding(.horizontal)
                     .padding(.bottom, 20)
@@ -207,6 +218,45 @@ struct RemindersScreen: View {
             updateFilteredDay()
         }
     }
+
+    // Helper to check if there are any reminders for the current filter period and date
+    private func isRemindersEmpty(for period: String, filteredDay: Date, reminders: [String: ReminderData]) -> Bool {
+
+        let calendar = Calendar.current
+        let reminderList = reminders.values
+        switch period {
+        case "today":
+            return !reminderList.contains(where: {
+                let date = $0.date
+                return calendar.isDate(date, inSameDayAs: filteredDay)
+                
+                
+            })
+        case "week":
+            return !reminderList.contains(where: {
+                let date = $0.date
+                let week1 = calendar.component(.weekOfYear, from: date)
+                let week2 = calendar.component(.weekOfYear, from: filteredDay)
+                let year1 = calendar.component(.yearForWeekOfYear, from: date)
+                let year2 = calendar.component(.yearForWeekOfYear, from: filteredDay)
+                return week1 == week2 && year1 == year2
+                
+            })
+        case "month":
+            return !reminderList.contains(where: {
+                let date = $0.date
+                let month1 = calendar.component(.month, from: date)
+                let month2 = calendar.component(.month, from: filteredDay)
+                let year1 = calendar.component(.year, from: date)
+                let year2 = calendar.component(.year, from: filteredDay)
+                return month1 == month2 && year1 == year2
+                
+            })
+        default:
+            return reminderList.isEmpty
+        }
+    }
+    
 
     private var footerToggles: some View {
         VStack(spacing: 12) {
@@ -357,7 +407,7 @@ struct ReminderRow: View {
     var dateKey: Date
     var documentID: String
     let firestoreManager: FirestoreManager
-    @State private var curReminderDoc: DocumentSnapshot?
+    @State private var curReminderData: [String: Any] = [:]
     let onUpdate: (() -> Void)?
 
     //Formats 24-hour input time to 12-hour time with AM/PM
@@ -380,24 +430,24 @@ struct ReminderRow: View {
                 HStack(spacing: 12) {
                     //DONE BUTTON
                     Button(action: {
-                        if let curReminder = curReminderDoc {
-                            let isComplete = curReminder.data()?["isComplete"] as? Bool ?? false
-                            if isComplete {
-                                showConfirmation = true
-                            } else {
-                                firestoreManager.updateReminderFields(
-                                    dateCreated: documentID,
-                                    fields: ["isComplete": true]
-                                )
-                            }
+                        let isComplete = curReminderData["isComplete"] as? Bool ?? false
+                        if isComplete {
+                            showConfirmation = true
+                        } else {
+                            firestoreManager.updateReminderFields(
+                                dateCreated: documentID,
+                                fields: ["isComplete": true]
+                            )
+                            // Update UI immediately
+                            self.curReminderData["isComplete"] = true
+                            //cancel the notification when "Done" is clicked
+                            cancelAlarm(reminderID: documentID)
                         }
-
                     }) {
-                        //database.users[userID]?[dateKey]?.isComplete == true
                         HStack(spacing: 6) {
-                            Image(systemName: (curReminderDoc?.data()?["isComplete"] as? Bool ?? false) ? "checkmark.circle.fill" : "circle")
+                            Image(systemName: (curReminderData["isComplete"] as? Bool ?? false) ? "checkmark.circle.fill" : "circle")
                                 .font(.title2)
-                                .foregroundColor((curReminderDoc?.data()?["isComplete"] as? Bool ?? false) ? .green : .gray)
+                                .foregroundColor((curReminderData["isComplete"] as? Bool ?? false) ? .green : .gray)
                             Text("Done")
                                 .font(.title3)
                                 .bold()
@@ -406,19 +456,50 @@ struct ReminderRow: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .fixedSize()
-                        
-                    } // Button ending
-                    
+                    }
                     .alert("Are you sure you want to mark this reminder as incomplete?", isPresented: $showConfirmation) {
                         Button("Yes", role: .destructive) {
                             firestoreManager.updateReminderFields(
                                 dateCreated: documentID,
                                 fields: ["isComplete": false]
                             )
-                            //database.users[userID]![dateKey]!.isComplete = false
+                            // Update UI immediately
+                            self.curReminderData["isComplete"] = false
+                            // Update (reset) the notification when marked as incomplete
+                            firestoreManager.getReminder(dateCreated: documentID) { document in
+                                guard let data = document?.data() else { return }
+
+                                if let timestamp = data["date"] as? Timestamp {
+                                    let date = timestamp.dateValue()
+                                    let title = data["title"] as? String ?? ""
+                                    let description = data["description"] as? String ?? ""
+
+                                    let repeatSettings = data["repeatSettings"] as? [String: Any]
+                                    let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
+                                    let repeatUntil = repeatSettings?["repeat_until_date"] as? String ?? "Forever"
+
+                                    var customRepeat: CustomRepeatType? = nil
+                                    if let repeatIntervals = repeatSettings?["repeatIntervals"] as? [String: Any],
+                                       let days = repeatIntervals["days"] as? String {
+                                        customRepeat = CustomRepeatType(days: days)
+                                    }
+
+                                    setAlarm(
+                                        dateAndTime: date,
+                                        title: title,
+                                        description: description,
+                                        repeat_type: repeatType,
+                                        repeat_until_date: repeatUntil,
+                                        repeatIntervals: customRepeat,
+                                        reminderID: documentID,
+                                        soundType: "Chord" // or load saved sound from Firestore if available
+                                    )
+                                    print("Reminder has been marked as incomplete and alarm rescheduled for \(date)")
+                                }
+                            }
                         }
                         Button("Nevermind", role: .cancel) {}
-                    } // Alert ending
+                    }
 
                     //DEBUG BUTTON
 //                    Button(action: {
@@ -503,10 +584,27 @@ struct ReminderRow: View {
             firestoreManager.getReminder(
                 dateCreated: documentID
             ) { document in
-                self.curReminderDoc = document
+                self.curReminderData = document?.data() ?? [:]
             }
         }
     }
+
+// Helper struct to mimic DocumentSnapshot for local UI change
+fileprivate struct LocalDocumentSnapshot: DocumentSnapshotProtocol {
+    private let _data: [String: Any]
+    init(data: [String: Any]) {
+        self._data = data
+    }
+    func data() -> [String: Any]? {
+        return _data
+    }
+    // Add any other required protocol stubs if needed
+}
+
+// Protocol to allow both DocumentSnapshot and LocalDocumentSnapshot
+fileprivate protocol DocumentSnapshotProtocol {
+    func data() -> [String: Any]?
+}
 }
 
 
