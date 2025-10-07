@@ -11,55 +11,25 @@ import FirebaseFirestore
 struct EditReminderScreen: View {
     @Environment(\.presentationMode) private var presentationMode
     @Binding var cur_screen: Screen
-    @Binding var reminder: ReminderData
     @State var showReminderNameAlert: Bool = false
-    @State var localTitle: String
-    @State var localDescription: String
-    @State var localEditScreenPriority: String
-    @State var localEditScreenIsLocked: Bool
-    @State var localEditScreenRepeatSetting: String
-    @State var localEditScreenRepeatUntil: String
-    @State var localCustomPatterns: Set<String>
-    @State private var localDate: Date
+    @State var localTitle: String = ""
+    @State var localDescription: String = ""
+    @State var localEditScreenPriority: String = "Medium"
+    @State var localEditScreenIsLocked: Bool = false
+    @State var localEditScreenRepeatSetting: String = "None"
+    @State var localEditScreenRepeatUntil: String = "Forever"
+    @State var localCustomPatterns: Set<String> = []
+    @State private var localDate: Date = Date()
+    @State private var isComplete: Bool = false
     @State var selectedSound: String = "Chord"
     let firestoreManager: FirestoreManager
     let reminderID: String
     let onUpdate: (() -> Void)?
+    
     var formattedDate: String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: localDate)
-    }
-
-    init(cur_screen: Binding<Screen>, reminder: Binding<ReminderData>, firestoreManager: FirestoreManager, reminderID: String, onUpdate: (() -> Void)? = nil) {
-        self._cur_screen = cur_screen
-        self._reminder = reminder
-        //local variables
-        self._localTitle = State(initialValue: reminder.wrappedValue.title)
-        self._localDescription = State(initialValue: reminder.wrappedValue.description)
-        self._localEditScreenPriority = State(initialValue: reminder.wrappedValue.priority)
-        self._localEditScreenIsLocked = State(initialValue: reminder.wrappedValue.isLocked)
-        self._localEditScreenRepeatSetting = State(initialValue: reminder.wrappedValue.repeatSettings.repeat_type)
-        //HAD TO MAKE REPEAT_UNTIL_DATE A STRING FOR THIS TO WORK -> might need to look into that (was originally a date type)
-        self._localEditScreenRepeatUntil = State(initialValue: reminder.wrappedValue.repeatSettings.repeat_until_date)
-        self._localDate = State(initialValue: reminder.wrappedValue.date)
-        
-        // Load custom patterns from existing reminder
-        let existingPatterns: Set<String> = {
-            if let days = reminder.wrappedValue.repeatSettings.repeatIntervals?.days {
-                let patterns = Set(days.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
-                //print("DEBUG: Loading existing patterns: \(patterns)")
-                return patterns
-            }
-            //print("DEBUG: No existing patterns found")
-            return []
-        }()
-        self._localCustomPatterns = State(initialValue: existingPatterns)
-        
-        self.firestoreManager = firestoreManager
-        self.reminderID = reminderID
-        self.onUpdate = onUpdate
-        
     }
     
     var body: some View {
@@ -107,7 +77,7 @@ struct EditReminderScreen: View {
                     VStack(spacing: 16) {
                         NavigationLink(
                             destination: DateSelectorScreen(
-                                reminderTitle: reminder.title,
+                                reminderTitle: localTitle,
                                 selectedDate: $localDate,
                                 cur_screen: $cur_screen,
                                 firestoreManager: firestoreManager
@@ -224,18 +194,10 @@ struct EditReminderScreen: View {
                             if success {
                                 DispatchQueue.main.async {
                                     let customRepeatType = localCustomPatterns.isEmpty ? nil : CustomRepeatType(days: localCustomPatterns.joined(separator: ","))
-                                    reminder.title = localTitle
-                                    reminder.description = localDescription
-                                    reminder.priority = localEditScreenPriority
-                                    reminder.isLocked = localEditScreenIsLocked
-                                    reminder.repeatSettings.repeat_type = localEditScreenRepeatSetting
-                                    reminder.repeatSettings.repeat_until_date = localEditScreenRepeatUntil
-                                    reminder.repeatSettings.repeatIntervals = customRepeatType
-                                    reminder.date = localDate
                                     
                                     // Cancel the old notification and set a new one
-                                    cancelAlarm(reminderID: reminderID) // cancel using reminderID identifier (same as in createReminderScreen)
-                                    if !reminder.isComplete {
+                                    cancelAlarm(reminderID: reminderID)
+                                    if !isComplete {
                                         setAlarm(
                                             dateAndTime: localDate,
                                             title: localTitle,
@@ -278,6 +240,42 @@ struct EditReminderScreen: View {
         }
         .onAppear {
             cur_screen = .EditScreen
+            // Load fresh reminder data from Firebase
+            firestoreManager.getReminder(dateCreated: reminderID) { document in
+                guard let data = document?.data() else { return }
+                
+                if let timestamp = data["date"] as? Timestamp {
+                    localDate = timestamp.dateValue()
+                }
+                if let title = data["title"] as? String {
+                    localTitle = title
+                }
+                if let description = data["description"] as? String {
+                    localDescription = description
+                }
+                if let priority = data["priority"] as? String {
+                    localEditScreenPriority = priority
+                }
+                if let isLocked = data["isLocked"] as? Bool {
+                    localEditScreenIsLocked = isLocked
+                }
+                if let repeatSettings = data["repeatSettings"] as? [String: Any] {
+                    if let repeatType = repeatSettings["repeat_type"] as? String {
+                        localEditScreenRepeatSetting = repeatType
+                    }
+                    if let repeatUntil = repeatSettings["repeat_until_date"] as? String {
+                        localEditScreenRepeatUntil = repeatUntil
+                    }
+                    if let repeatIntervals = repeatSettings["repeatIntervals"] as? [String: Any],
+                       let days = repeatIntervals["days"] as? String {
+                        localCustomPatterns = Set(days.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
+                    }
+                }
+                // Update completion status
+                if let complete = data["isComplete"] as? Bool {
+                    isComplete = complete
+                }
+            }
         }
         .onChange(of: reminder.date) { _, newDate in
             localDate = newDate

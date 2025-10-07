@@ -514,12 +514,6 @@ struct ReminderRow: View {
                     if showEditButton {
                         NavigationLink(destination: EditReminderScreen(
                             cur_screen: $cur_screen,
-                            reminder: Binding(
-                                get: { reminder },
-                                set: { newValue in
-                                    reminder = newValue
-                                }
-                            ),
                             firestoreManager: firestoreManager,
                             reminderID: documentID,
                             onUpdate: onUpdate

@@ -87,6 +87,28 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
                     print("Successfully added weekly notification")
                 }
             }
+        } else if repeat_type == "Monthly" {
+            let dateComponents = calendar.dateComponents([.weekly, .hour, .minute], from: dateAndTime)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Error adding monthly notification: \(error)")
+                } else {
+                    print("Successfully added monthly notification")
+                }
+            }
+        } else if repeat_type == "Yearly" {
+            let dateComponents = calendar.dateComponents([.month, .day, .hour, .minute], from: dateAndTime)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("Error adding yearly notification: \(error)")
+                } else {
+                    print("Successfully added yearly notification")
+                }
+            }
         } else {
             // Non-repeating or monthly (monthly needs special handling)
             let shouldRepeat = false
