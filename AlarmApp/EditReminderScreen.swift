@@ -22,6 +22,7 @@ struct EditReminderScreen: View {
     @State private var localDate: Date = Date()
     @State private var isComplete: Bool = false
     @State var selectedSound: String = "Chord"
+    @State var hasLoadedFromFirebase: Bool = false
     let firestoreManager: FirestoreManager
     let reminderID: String
     let onUpdate: (() -> Void)?
@@ -244,42 +245,44 @@ struct EditReminderScreen: View {
             firestoreManager.getReminder(dateCreated: reminderID) { document in
                 guard let data = document?.data() else { return }
                 
-                if let timestamp = data["date"] as? Timestamp {
-                    localDate = timestamp.dateValue()
-                }
-                if let title = data["title"] as? String {
-                    localTitle = title
-                }
-                if let description = data["description"] as? String {
-                    localDescription = description
-                }
-                if let priority = data["priority"] as? String {
-                    localEditScreenPriority = priority
-                }
-                if let isLocked = data["isLocked"] as? Bool {
-                    localEditScreenIsLocked = isLocked
-                }
-                if let repeatSettings = data["repeatSettings"] as? [String: Any] {
-                    if let repeatType = repeatSettings["repeat_type"] as? String {
-                        localEditScreenRepeatSetting = repeatType
+                if !hasLoadedFromFirebase {
+                    hasLoadedFromFirebase = true
+                    if let timestamp = data["date"] as? Timestamp {
+                        localDate = timestamp.dateValue()
                     }
-                    if let repeatUntil = repeatSettings["repeat_until_date"] as? String {
-                        localEditScreenRepeatUntil = repeatUntil
+                    if let title = data["title"] as? String {
+                        localTitle = title
                     }
-                    if let repeatIntervals = repeatSettings["repeatIntervals"] as? [String: Any],
-                       let days = repeatIntervals["days"] as? String {
-                        localCustomPatterns = Set(days.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
+                    if let description = data["description"] as? String {
+                        localDescription = description
+                    }
+                    if let priority = data["priority"] as? String {
+                        localEditScreenPriority = priority
+                    }
+                    if let isLocked = data["isLocked"] as? Bool {
+                        localEditScreenIsLocked = isLocked
+                    }
+                    if let repeatSettings = data["repeatSettings"] as? [String: Any] {
+                        if let repeatType = repeatSettings["repeat_type"] as? String {
+                            localEditScreenRepeatSetting = repeatType
+                        }
+                        if let repeatUntil = repeatSettings["repeat_until_date"] as? String {
+                            localEditScreenRepeatUntil = repeatUntil
+                        }
+                        if let repeatIntervals = repeatSettings["repeatIntervals"] as? [String: Any],
+                           let days = repeatIntervals["days"] as? String {
+                            localCustomPatterns = Set(days.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
+                        }
+                    }
+                    // Update completion status
+                    if let complete = data["isComplete"] as? Bool {
+                        isComplete = complete
                     }
                 }
-                // Update completion status
-                if let complete = data["isComplete"] as? Bool {
-                    isComplete = complete
-                }
+                
             }
         }
-        .onChange(of: reminder.date) { _, newDate in
-            localDate = newDate
-        }
+
     }
 }
 

@@ -88,7 +88,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
                 }
             }
         } else if repeat_type == "Monthly" {
-            let dateComponents = calendar.dateComponents([.weekly, .hour, .minute], from: dateAndTime)
+            let dateComponents = calendar.dateComponents([.day, .hour, .minute], from: dateAndTime)
             let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
             let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
             UNUserNotificationCenter.current().add(request) { error in

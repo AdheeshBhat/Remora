@@ -239,6 +239,8 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                     currentDate = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate) ?? endDate
                 case "Monthly":
                     currentDate = calendar.date(byAdding: .month, value: 1, to: currentDate) ?? endDate
+                case "Yearly":
+                    currentDate = calendar.date(byAdding: .year, value: 1, to: currentDate) ?? endDate
                 default:
                     currentDate = endDate
                 }
@@ -261,6 +263,8 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                     nextDate = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate)
                 case "Monthly":
                     nextDate = calendar.date(byAdding: .month, value: 1, to: currentDate)
+                case "Yearly":
+                    nextDate = calendar.date(byAdding: .year, value: 1, to: currentDate) ?? endDate
                 default:
                     nextDate = nil
                 }
