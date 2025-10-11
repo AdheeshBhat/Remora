@@ -35,9 +35,14 @@ func filterRemindersForWeek(userData: [Date: ReminderData], filteredDay: Date?) 
     var endOfWeek = calendar.date(byAdding: .day, value: 6, to: startOfWeek)!
     endOfWeek = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endOfWeek)!
     
+    print("Week filter - Start: \(startOfWeek), End: \(endOfWeek)")
+    
     return userData.filter { (_, reminder) in
         let reminderDate = reminder.date
-        return reminderDate >= startOfWeek && reminderDate <= endOfWeek
+        print("Checking reminder date: \(reminderDate) against week range")
+        let isInRange = reminderDate >= startOfWeek && reminderDate <= endOfWeek
+        print("Reminder in range: \(isInRange)")
+        return isInRange
     }
 }
 
@@ -54,9 +59,14 @@ func filterRemindersForMonth(userData: [Date: ReminderData], filteredDay: Date?)
 
     let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
     
+    print("Month filter - Start: \(startOfMonth), End: \(endOfMonth)")
+    
     return userData.filter { (_, reminder) in
         let reminderDate = reminder.date
-        return reminderDate >= startOfMonth && reminderDate <= endOfMonth
+        print("Checking reminder date: \(reminderDate) against month range")
+        let isInRange = reminderDate >= startOfMonth && reminderDate <= endOfMonth
+        print("Reminder in range: \(isInRange)")
+        return isInRange
     }
 }
 
@@ -107,7 +117,7 @@ func showAllReminders(userID: Int, period: String, cur_screen: Binding<Screen>, 
                 //.padding()
             }// if statement ending
         } //ForEach() ending
-    } //VStack ending
+    }
 
 }
 
@@ -158,7 +168,7 @@ func showIncompleteReminders(userID: Int, period: String, cur_screen: Binding<Sc
                 //.padding()
             } // if statement ending
         } //ForEach() ending
-    } //VStack ending
+    }
 }
 
 
@@ -225,36 +235,62 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
             if reminder.date >= startDate && reminder.date <= endDate {
                 expandedData[documentID] = reminder
             }
+        } else if repeatType == "Custom" {
+            // Handle custom patterns differently - generate all occurrences in range
+            if let intervals = reminder.repeatSettings.repeatIntervals, let daysString = intervals.days {
+                let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+                var seenDates = Set<String>()
+                
+                // Include original reminder if it's in range
+                if reminder.date >= startDate && reminder.date <= endDate {
+                    expandedData[documentID] = reminder
+                }
+                
+                // Generate occurrences for each month in range, starting from next month after original
+                let originalMonth = calendar.dateComponents([.year, .month], from: reminder.date)
+                let startMonth = calendar.date(byAdding: .month, value: 1, to: calendar.date(from: originalMonth)!) ?? reminder.date
+                var currentMonth = calendar.dateComponents([.year, .month], from: startMonth)
+                let endMonth = calendar.dateComponents([.year, .month], from: endDate)
+                
+                while (currentMonth.year! < endMonth.year! || (currentMonth.year! == endMonth.year! && currentMonth.month! <= endMonth.month!)) && seenDates.count < 50 {
+                    let monthStart = calendar.date(from: currentMonth)!
+                    
+                    for pattern in patterns {
+                        if let occurrenceDate = calculatePatternDateForMonth(pattern: pattern, month: monthStart) {
+                            let finalDate = calendar.date(bySettingHour: calendar.component(.hour, from: reminder.date), minute: calendar.component(.minute, from: reminder.date), second: 0, of: occurrenceDate)!
+                            let dateKey = createUniqueIDFromDate(date: finalDate)
+                            
+                            if finalDate >= startDate && finalDate <= endDate && !seenDates.contains(dateKey) {
+                                seenDates.insert(dateKey)
+                                var instanceReminder = reminder
+                                instanceReminder.date = finalDate
+                                expandedData["\(documentID)-\(dateKey)"] = instanceReminder
+                            }
+                        }
+                    }
+                    
+                    currentMonth.month! += 1
+                    if currentMonth.month! > 12 {
+                        currentMonth.month = 1
+                        currentMonth.year! += 1
+                    }
+                }
+            }
         } else {
-            // Repeating reminder - generate instances
-            var currentDate = reminder.date
+            // Standard repeating reminder - always include original if in range
             var instanceCount = 0
             
-            // Find first occurrence in range
-            while currentDate < startDate && instanceCount < 1000 {
-                switch repeatType {
-                case "Daily":
-                    currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? endDate
-                case "Weekly":
-                    currentDate = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate) ?? endDate
-                case "Monthly":
-                    currentDate = calendar.date(byAdding: .month, value: 1, to: currentDate) ?? endDate
-                case "Yearly":
-                    currentDate = calendar.date(byAdding: .year, value: 1, to: currentDate) ?? endDate
-                default:
-                    currentDate = endDate
-                }
+            // Include original reminder if it's in range
+            if reminder.date >= startDate && reminder.date <= endDate {
+                expandedData["\(documentID)-\(instanceCount)"] = reminder
                 instanceCount += 1
             }
             
-            // Generate instances within range
-            instanceCount = 0
-            while currentDate <= endDate && instanceCount < 50 {
-                var instanceReminder = reminder
-                instanceReminder.date = currentDate
-                expandedData["\(documentID)-\(instanceCount)"] = instanceReminder
-                
-                // Calculate next occurrence
+            // Generate additional instances
+            var currentDate = reminder.date
+            
+            // Generate future instances
+            while instanceCount < 50 {
                 let nextDate: Date?
                 switch repeatType {
                 case "Daily":
@@ -264,17 +300,175 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 case "Monthly":
                     nextDate = calendar.date(byAdding: .month, value: 1, to: currentDate)
                 case "Yearly":
-                    nextDate = calendar.date(byAdding: .year, value: 1, to: currentDate) ?? endDate
+                    nextDate = calendar.date(byAdding: .year, value: 1, to: currentDate)
                 default:
                     nextDate = nil
                 }
                 
                 guard let next = nextDate, next > currentDate else { break }
                 currentDate = next
-                instanceCount += 1
+                
+                // Check repeat_until_date
+                if reminder.repeatSettings.repeat_until_date != "Forever" && !reminder.repeatSettings.repeat_until_date.isEmpty {
+                    let fmt = DateFormatter()
+                    fmt.dateFormat = "yyyy-MM-dd"
+                    if let endDate = fmt.date(from: reminder.repeatSettings.repeat_until_date),
+                       currentDate > endDate {
+                        break
+                    }
+                }
+                
+                if currentDate > endDate { break }
+                if currentDate >= startDate {
+                    var instanceReminder = reminder
+                    instanceReminder.date = currentDate
+                    expandedData["\(documentID)-\(instanceCount)"] = instanceReminder
+                    instanceCount += 1
+                }
             }
         }
     }
     
     return expandedData
+}
+
+func expandRepeatingRemindersForCalendar(userData: [String: ReminderData], startDate: Date, endDate: Date) -> [String: ReminderData] {
+    var expandedData: [String: ReminderData] = [:]
+    let calendar = Calendar.current
+    
+    for (documentID, reminder) in userData {
+        let repeatType = reminder.repeatSettings.repeat_type
+        
+        if repeatType == "None" {
+            if reminder.date >= startDate && reminder.date <= endDate {
+                expandedData[documentID] = reminder
+            }
+        } else if repeatType == "Custom" {
+            if let intervals = reminder.repeatSettings.repeatIntervals, let daysString = intervals.days {
+                let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+                var seenDates = Set<String>()
+                
+                // Include original reminder if it's in range
+                if reminder.date >= startDate && reminder.date <= endDate {
+                    expandedData[documentID] = reminder
+                }
+                
+                let originalMonth = calendar.dateComponents([.year, .month], from: reminder.date)
+                let startMonth = calendar.date(byAdding: .month, value: 1, to: calendar.date(from: originalMonth)!) ?? reminder.date
+                var currentMonth = calendar.dateComponents([.year, .month], from: startMonth)
+                let endMonth = calendar.dateComponents([.year, .month], from: endDate)
+                
+                while (currentMonth.year! < endMonth.year! || (currentMonth.year! == endMonth.year! && currentMonth.month! <= endMonth.month!)) && seenDates.count < 200 {
+                    let monthStart = calendar.date(from: currentMonth)!
+                    
+                    for pattern in patterns {
+                        if let occurrenceDate = calculatePatternDateForMonth(pattern: pattern, month: monthStart) {
+                            let finalDate = calendar.date(bySettingHour: calendar.component(.hour, from: reminder.date), minute: calendar.component(.minute, from: reminder.date), second: 0, of: occurrenceDate)!
+                            let dateKey = createUniqueIDFromDate(date: finalDate)
+                            
+                            if finalDate >= startDate && finalDate <= endDate && !seenDates.contains(dateKey) {
+                                seenDates.insert(dateKey)
+                                var instanceReminder = reminder
+                                instanceReminder.date = finalDate
+                                expandedData["\(documentID)-\(dateKey)"] = instanceReminder
+                            }
+                        }
+                    }
+                    
+                    currentMonth.month! += 1
+                    if currentMonth.month! > 12 {
+                        currentMonth.month = 1
+                        currentMonth.year! += 1
+                    }
+                }
+            }
+        } else {
+            var instanceCount = 0
+            
+            // Include original reminder if it's in range
+            if reminder.date >= startDate && reminder.date <= endDate {
+                expandedData["\(documentID)-\(instanceCount)"] = reminder
+                instanceCount += 1
+            }
+            
+            // Generate additional instances
+            var currentDate = reminder.date
+            
+            while instanceCount < 200 {
+                let nextDate: Date?
+                switch repeatType {
+                case "Daily":
+                    nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate)
+                case "Weekly":
+                    nextDate = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate)
+                case "Monthly":
+                    nextDate = calendar.date(byAdding: .month, value: 1, to: currentDate)
+                case "Yearly":
+                    nextDate = calendar.date(byAdding: .year, value: 1, to: currentDate)
+                default:
+                    nextDate = nil
+                }
+                
+                guard let next = nextDate, next > currentDate else { break }
+                currentDate = next
+                
+                // Check repeat_until_date
+                if reminder.repeatSettings.repeat_until_date != "Forever" && !reminder.repeatSettings.repeat_until_date.isEmpty {
+                    let fmt = DateFormatter()
+                    fmt.dateFormat = "yyyy-MM-dd"
+                    if let endDate = fmt.date(from: reminder.repeatSettings.repeat_until_date),
+                       currentDate > endDate {
+                        break
+                    }
+                }
+                
+                if currentDate > endDate { break }
+                if currentDate >= startDate {
+                    var instanceReminder = reminder
+                    instanceReminder.date = currentDate
+                    expandedData["\(documentID)-\(instanceCount)"] = instanceReminder
+                    instanceCount += 1
+                }
+            }
+        }
+    }
+    
+    return expandedData
+}
+
+func calculatePatternDateForMonth(pattern: String, month: Date) -> Date? {
+    let calendar = Calendar.current
+    let components = pattern.split(separator: " ")
+    guard components.count == 2 else { return nil }
+    
+    let ordinal = String(components[0])
+    let dayName = String(components[1])
+    
+    // Convert day name to weekday number
+    let weekdayMap = ["Mon": 2, "Tue": 3, "Wed": 4, "Thu": 5, "Fri": 6, "Sat": 7, "Sun": 1]
+    guard let weekday = weekdayMap[dayName] else { return nil }
+    
+    // Extract ordinal number
+    let ordinalNumber: Int
+    if ordinal.hasPrefix("1st") { ordinalNumber = 1 }
+    else if ordinal.hasPrefix("2nd") { ordinalNumber = 2 }
+    else if ordinal.hasPrefix("3rd") { ordinalNumber = 3 }
+    else if ordinal.hasPrefix("4th") { ordinalNumber = 4 }
+    else { return nil }
+    
+    // Find the nth occurrence of the weekday in this specific month
+    let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: month))!
+    var occurrenceCount = 0
+    
+    for day in 1...31 {
+        if let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart),
+           calendar.component(.month, from: date) == calendar.component(.month, from: month),
+           calendar.component(.weekday, from: date) == weekday {
+            occurrenceCount += 1
+            if occurrenceCount == ordinalNumber {
+                return date
+            }
+        }
+    }
+    return nil
 }

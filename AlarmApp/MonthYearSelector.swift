@@ -24,7 +24,9 @@ struct MonthYearSelector: View {
                         },
                         set: { newValue in
                             let calendar = Calendar.current
-                            var components = calendar.dateComponents([.year, .day], from: filteredDay ?? Date())
+                            let currentYear = Calendar.current.component(.year, from: filteredDay ?? Date())
+                            var components = DateComponents()
+                            components.year = currentYear
                             components.month = newValue + 1
                             components.day = 1
                             if let newDate = calendar.date(from: components) {
@@ -48,8 +50,10 @@ struct MonthYearSelector: View {
                         },
                         set: { newValue in
                             let calendar = Calendar.current
-                            var components = calendar.dateComponents([.month, .day], from: filteredDay ?? Date())
+                            let currentMonth = Calendar.current.component(.month, from: filteredDay ?? Date())
+                            var components = DateComponents()
                             components.year = newValue
+                            components.month = currentMonth
                             components.day = 1
                             if let newDate = calendar.date(from: components) {
                                 filteredDay = newDate

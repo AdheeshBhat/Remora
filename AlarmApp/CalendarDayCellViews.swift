@@ -66,33 +66,52 @@ struct MonthDayCellView: View {
     }
     
 
+    @ViewBuilder
     private func reminderList(for reminders: [CalendarReminder]) -> some View {
-        VStack(spacing: 1) {
-            ForEach(isReminderViewOn ? reminders : Array(reminders.prefix(3)), id: \.id) { reminder in
-                ReminderCell(
-                    reminder: reminder,
-                    reminderData: reminderData(for: reminder),
-                    cur_screen: $cur_screen,
-                    firestoreManager: firestoreManager
-                )
-            }
-            if !isReminderViewOn && reminders.count > 3 {
-                NavigationLink(
-                    destination: RemindersScreen(
-                        cur_screen: $cur_screen,
-                        filterPeriod: "today",
-                        dayFilteredDay: date,
-                        remindersForUser: [:],
-                        firestoreManager: firestoreManager
-                        
-                    )
-                ) {
-                    Text("+\(reminders.count - 3)")
-                        .font(.system(size: 6))
-                        .foregroundColor(.blue)
-                        .fontWeight(.medium)
+        let maxHeight = cellHeight - 30 // Reserve space for date number
+        
+        if isReminderViewOn {
+            ScrollView {
+                VStack(spacing: 1) {
+                    ForEach(reminders, id: \.id) { reminder in
+                        ReminderCell(
+                            reminder: reminder,
+                            reminderData: reminderData(for: reminder),
+                            cur_screen: $cur_screen,
+                            firestoreManager: firestoreManager
+                        )
+                    }
                 }
             }
+            .frame(maxHeight: maxHeight)
+        } else {
+            VStack(spacing: 1) {
+                ForEach(Array(reminders.prefix(3)), id: \.id) { reminder in
+                    ReminderCell(
+                        reminder: reminder,
+                        reminderData: reminderData(for: reminder),
+                        cur_screen: $cur_screen,
+                        firestoreManager: firestoreManager
+                    )
+                }
+                if reminders.count > 3 {
+                    NavigationLink(
+                        destination: RemindersScreen(
+                            cur_screen: $cur_screen,
+                            filterPeriod: "today",
+                            dayFilteredDay: date,
+                            remindersForUser: [:],
+                            firestoreManager: firestoreManager
+                        )
+                    ) {
+                        Text("+\(reminders.count - 3)")
+                            .font(.system(size: 6))
+                            .foregroundColor(.blue)
+                            .fontWeight(.medium)
+                    }
+                }
+            }
+            .frame(maxHeight: maxHeight)
         }
     }
 }

@@ -8,15 +8,48 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseFirestore
+import UserNotifications
 
 @main
 struct AlarmAppApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+    
     init() {
         FirebaseApp.configure()
+        setupNotificationDelegate()
     }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                NotificationManager.shared.refreshForeverAlarms()
+            }
+        }
+    }
+    
+    private func setupNotificationDelegate() {
+        UNUserNotificationCenter.current().delegate = AppNotificationDelegate.shared
+    }
+}
+
+class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = AppNotificationDelegate()
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler:
+                                @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .badge])
+    }
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler:
+                                @escaping () -> Void) {
+        NotificationManager.shared.handleNotificationResponse(response: response)
+        completionHandler()
     }
 }

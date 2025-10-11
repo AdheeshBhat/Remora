@@ -300,6 +300,90 @@ class FirestoreManager {
             }
         }
     }
+    
+    // Get all forever repeating reminders for refreshing notifications
+    func getForeverReminders(completion: @escaping ([String: ReminderData]?) -> Void) {
+        guard let currentUser = Auth.auth().currentUser else {
+            completion(nil)
+            return
+        }
+        
+        db.collection("users")
+            .document(currentUser.uid)
+            .collection("reminders")
+            .whereField("repeatSettings.repeat_until_date", isEqualTo: "Forever")
+            .getDocuments { querySnapshot, error in
+                if let error = error {
+                    print("Error fetching forever reminders: \(error)")
+                    completion(nil)
+                    return
+                }
+                
+                guard let documents = querySnapshot?.documents else {
+                    completion([:])
+                    return
+                }
+                
+                var remindersDict: [String: ReminderData] = [:]
+                
+                for doc in documents {
+                    let data = doc.data()
+                    let documentID = doc.documentID
+                    
+                    // Parse reminder data (same as getRemindersForUser)
+                    let id = data["ID"] as? Int ?? 0
+                    let title = data["title"] as? String ?? ""
+                    let description = data["description"] as? String ?? ""
+                    let priority = data["priority"] as? String ?? "Low"
+                    let author = data["author"] as? String ?? "user"
+                    let isComplete = data["isComplete"] as? Bool ?? false
+                    let isLocked = data["isLocked"] as? Bool ?? false
+                    
+                    let dateFromField: Date?
+                    if let ts = data["date"] as? Timestamp {
+                        dateFromField = ts.dateValue()
+                    } else {
+                        dateFromField = nil
+                    }
+                    
+                    let repeatSettings: RepeatSettings
+                    if let rsMap = data["repeatSettings"] as? [String: Any] {
+                        let repeatType = rsMap["repeat_type"] as? String ?? "None"
+                        let repeatUntil = rsMap["repeat_until_date"] as? String ?? ""
+                        
+                        let repeatIntervals: CustomRepeatType?
+                        if let intervalsMap = rsMap["repeatIntervals"] as? [String: Any] {
+                            let days = intervalsMap["days"] as? String
+                            let weeks = intervalsMap["weeks"] as? [Int]
+                            let months = intervalsMap["months"] as? [Int]
+                            repeatIntervals = CustomRepeatType(days: days, weeks: weeks, months: months)
+                        } else {
+                            repeatIntervals = nil
+                        }
+                        
+                        repeatSettings = RepeatSettings(repeat_type: repeatType, repeat_until_date: repeatUntil, repeatIntervals: repeatIntervals)
+                    } else {
+                        repeatSettings = RepeatSettings(repeat_type: "None", repeat_until_date: "")
+                    }
+                    
+                    let reminder = ReminderData(
+                        ID: id,
+                        date: dateFromField ?? Date(),
+                        title: title,
+                        description: description,
+                        repeatSettings: repeatSettings,
+                        priority: priority,
+                        isComplete: isComplete,
+                        author: author,
+                        isLocked: isLocked
+                    )
+                    
+                    remindersDict[documentID] = reminder
+                }
+                
+                DispatchQueue.main.async { completion(remindersDict) }
+            }
+    }
 }
 
 

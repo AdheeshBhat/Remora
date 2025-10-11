@@ -183,32 +183,38 @@ struct RemindersScreen: View {
         TabView(selection: $swipeOffset) {
             ForEach(-6...6, id: \.self) { index in
                 ScrollView {
-                    LazyVStack(spacing: 12) {
-                        // Filter the reminders for the current period and date
-                        let filteredReminders = formattedReminders(
-                            userID: 1,
-                            period: filterPeriod,
-                            cur_screen: $cur_screen,
-                            showEditButton: !isDeleteViewOn,
-                            showDeleteButton: isDeleteViewOn,
-                            filteredDay: calculateDateFor(),
-                            firestoreManager: firestoreManager,
-                            userData: remindersForUser,
-                            onUpdate: loadReminders
-                        )
-                        if isRemindersEmpty(for: filterPeriod, filteredDay: calculateDateFor(), reminders: remindersForUser) {
-                            Text("No reminders for this period.")
-                                .font(.title3)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.top, 40)
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            filteredReminders
+                    ScrollViewReader { proxy in
+                        LazyVStack(spacing: 12) {
+                            // Filter the reminders for the current period and date
+                            let filteredReminders = formattedReminders(
+                                userID: 1,
+                                period: filterPeriod,
+                                cur_screen: $cur_screen,
+                                showEditButton: !isDeleteViewOn,
+                                showDeleteButton: isDeleteViewOn,
+                                filteredDay: calculateDateFor(),
+                                firestoreManager: firestoreManager,
+                                userData: remindersForUser,
+                                onUpdate: loadReminders
+                            )
+                            if isRemindersEmpty(for: filterPeriod, filteredDay: calculateDateFor(), reminders: remindersForUser) {
+                                Text("No reminders for this period.")
+                                    .font(.title3)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.top, 40)
+                                    .frame(maxWidth: .infinity)
+                            } else {
+                                filteredReminders
+                            }
+                        }
+                        .id("top")
+                        .padding(.horizontal)
+                        .padding(.bottom, 20)
+                        .onChange(of: filterPeriod) { _ in
+                            proxy.scrollTo("top", anchor: .top)
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
                 }
                 .tag(index)
             }
@@ -221,40 +227,8 @@ struct RemindersScreen: View {
 
     // Helper to check if there are any reminders for the current filter period and date
     private func isRemindersEmpty(for period: String, filteredDay: Date, reminders: [String: ReminderData]) -> Bool {
-
-        let calendar = Calendar.current
-        let reminderList = reminders.values
-        switch period {
-        case "today":
-            return !reminderList.contains(where: {
-                let date = $0.date
-                return calendar.isDate(date, inSameDayAs: filteredDay)
-                
-                
-            })
-        case "week":
-            return !reminderList.contains(where: {
-                let date = $0.date
-                let week1 = calendar.component(.weekOfYear, from: date)
-                let week2 = calendar.component(.weekOfYear, from: filteredDay)
-                let year1 = calendar.component(.yearForWeekOfYear, from: date)
-                let year2 = calendar.component(.yearForWeekOfYear, from: filteredDay)
-                return week1 == week2 && year1 == year2
-                
-            })
-        case "month":
-            return !reminderList.contains(where: {
-                let date = $0.date
-                let month1 = calendar.component(.month, from: date)
-                let month2 = calendar.component(.month, from: filteredDay)
-                let year1 = calendar.component(.year, from: date)
-                let year2 = calendar.component(.year, from: filteredDay)
-                return month1 == month2 && year1 == year2
-                
-            })
-        default:
-            return reminderList.isEmpty
-        }
+        let expandedReminders = expandRepeatingReminders(userData: reminders, period: period, filteredDay: filteredDay)
+        return expandedReminders.isEmpty
     }
     
 
@@ -554,6 +528,7 @@ struct ReminderRow: View {
                                 firestoreManager.deleteReminder(
                                     dateCreated: documentID
                                 )
+                                onUpdate?()
                             }
                             Button("Nevermind", role: .cancel) {}
                         }

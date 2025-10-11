@@ -84,8 +84,14 @@ class CalendarViewModel: ObservableObject {
 
     func loadReminders(from allReminders: [String: ReminderData]) {
         var grouped: [Date: [CalendarReminder]] = [:]
+        
+        // Expand repeating reminders for a wide date range (1 year)
+        let startDate = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
+        let endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+        
+        let expandedReminders = expandRepeatingRemindersForCalendar(userData: allReminders, startDate: startDate, endDate: endDate)
 
-        for (_, reminder) in allReminders {
+        for (_, reminder) in expandedReminders {
             let dateKey = normalizeDate(reminder.date)
             let simpleReminder = CalendarReminder(id: UUID(), title: reminder.title, date: reminder.date)
 
@@ -112,6 +118,8 @@ struct CalendarGrid: View {
     let isReminderViewOn: Bool
     @Binding var cur_screen: Screen
     let firestoreManager: FirestoreManager
+    let monthFilteredDay: Date?
+    let weekFilteredDay: Date?
 
     var body: some View {
         if calendarViewType == "month" {
@@ -162,7 +170,7 @@ struct CalendarView: View {
     @State private var isCalendarViewOn: Bool = true
     @State private var isReminderViewOn: Bool = false
     @State private var isEditingMonthYear = false
-    @State private var monthFilteredDay: Date? = Date()
+    @State private var monthFilteredDay: Date? = nil
     @State private var weekFilteredDay: Date? = Date()
     @State private var zoomScale: CGFloat = 1.0
     @State private var lastZoomScale: CGFloat = 1.0
@@ -171,6 +179,7 @@ struct CalendarView: View {
     @State private var zoomAnchor: UnitPoint = .center
     @State private var swipeOffset: Int = 0
     @State private var canResetDate: Bool = false
+    @State private var isUsingPicker: Bool = false
     let firestoreManager: FirestoreManager
 
     let minZoom: CGFloat = 1.0
@@ -297,8 +306,28 @@ struct CalendarView: View {
                         filteredDay: $monthFilteredDay,
                         isEditingMonthYear: $isEditingMonthYear,
                         currentPeriodText: currentPeriodText,
-                        onDone: { isEditingMonthYear = false }
+                        onDone: {
+                            isEditingMonthYear = false
+                            // Update swipeOffset when picker is used
+                            if let monthFilteredDay = monthFilteredDay {
+                                let currentDate = Date()
+                                let currentMonth = Calendar.current.component(.month, from: currentDate)
+                                let currentYear = Calendar.current.component(.year, from: currentDate)
+                                let selectedMonth = Calendar.current.component(.month, from: monthFilteredDay)
+                                let selectedYear = Calendar.current.component(.year, from: monthFilteredDay)
+                                
+                                let monthDiff = (selectedYear - currentYear) * 12 + (selectedMonth - currentMonth)
+                                swipeOffset = monthDiff
+                                canResetDate = monthDiff != 0
+                            }
+                        }
                     )
+                    .onChange(of: isEditingMonthYear) { _, newValue in
+                        if newValue {
+                            // Set filteredDay to currently displayed month when opening picker
+                            monthFilteredDay = Calendar.current.date(byAdding: .month, value: swipeOffset, to: Date())
+                        }
+                    }
                 } else {
                     Text(currentPeriodText)
                         .font(.title)
@@ -341,7 +370,7 @@ struct CalendarView: View {
                     let cellHeight = (geometry.size.height - 30) / (calendarViewType == "month" ? 6 : 1)
 
                     TabView(selection: $swipeOffset) {
-                        ForEach(-6...6, id: \.self) { index in
+                        ForEach(-60...60, id: \.self) { index in
                             CalendarGrid(
                                 calendarViewType: calendarViewType,
                                 helper: helper,
@@ -352,15 +381,22 @@ struct CalendarView: View {
                                 zoomScale: zoomScale,
                                 isReminderViewOn: isReminderViewOn,
                                 cur_screen: $cur_screen,
-                                firestoreManager: firestoreManager
+                                firestoreManager: firestoreManager,
+                                monthFilteredDay: monthFilteredDay,
+                                weekFilteredDay: weekFilteredDay
                             )
                             .tag(index)
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
-                    .onChange(of: swipeOffset) { _, _ in
-                        updateFilteredDay()
+                    .onChange(of: swipeOffset) { _, newValue in
+                        // Update monthFilteredDay when swiping (but not when picker is active)
+                        if !isEditingMonthYear {
+                            monthFilteredDay = Calendar.current.date(byAdding: .month, value: swipeOffset, to: Date())
+                        }
+                        canResetDate = swipeOffset != 0
                     }
+
 
                     if zoomScale > 1.0 {
                         HStack {
@@ -433,7 +469,6 @@ struct CalendarView: View {
                     viewModel.loadReminders(from: fetchedReminders)
                 }
             }
-            monthFilteredDay = viewModel.selectedDate
             weekFilteredDay = viewModel.selectedDate
             cur_screen = .CalendarScreen
         }
@@ -447,30 +482,28 @@ struct CalendarView: View {
                 weekFilteredDay = newValue
             }
         }
+
     }
 
     private func updateFilteredDay() {
         if calendarViewType == "month" {
-            let base = monthFilteredDay ?? Date()
-            monthFilteredDay = Calendar.current.date(byAdding: .month, value: swipeOffset, to: base)
+            monthFilteredDay = Calendar.current.date(byAdding: .month, value: swipeOffset, to: Date())
         } else {
-            let base = weekFilteredDay ?? Date()
-            weekFilteredDay = Calendar.current.date(byAdding: .weekOfYear, value: swipeOffset, to: base)
+            weekFilteredDay = Calendar.current.date(byAdding: .weekOfYear, value: swipeOffset, to: Date())
         }
 
         if swipeOffset != 0 {
             canResetDate = true
         }
-        swipeOffset = 0
     }
 
     private var currentPeriodText: String {
         let today: Date
         if calendarViewType == "month" {
-            today = monthFilteredDay ?? Date()
+            today = Calendar.current.date(byAdding: .month, value: swipeOffset, to: Date()) ?? Date()
             return monthString(today) + " " + yearString(today)
         } else if calendarViewType == "week" {
-            today = weekFilteredDay ?? Date()
+            today = Calendar.current.date(byAdding: .weekOfYear, value: swipeOffset, to: Date()) ?? Date()
             return weekString(from: today)
         } else {
             return ""

@@ -9,7 +9,7 @@ import UserNotifications
 
 func requestNotificationPermission() {
     let center = UNUserNotificationCenter.current()
-    center.delegate = NotificationDelegate.shared
+    center.delegate = AppNotificationDelegate.shared
     center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
         if granted {
             print("Permission granted")
@@ -19,109 +19,119 @@ func requestNotificationPermission() {
     }
 }
 
-//Used to allow notifications to pop up even if app is running in the foreground
-class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
-    static let shared = NotificationDelegate()
-
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                willPresent notification: UNNotification,
-                                withCompletionHandler completionHandler:
-                                @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .sound, .badge])
-    }
-}
-
 
 func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String) {
+    // Handle forever repeating alarms with NotificationManager
+    if repeat_until_date == "Forever" {
+        let reminder = ReminderData(
+            ID: 0,
+            date: dateAndTime,
+            title: title,
+            description: description,
+            repeatSettings: RepeatSettings(
+                repeat_type: repeat_type,
+                repeat_until_date: repeat_until_date,
+                repeatIntervals: repeatIntervals
+            ),
+            priority: "Low",
+            isComplete: false,
+            author: "user",
+            isLocked: false
+        )
+        NotificationManager.shared.scheduleForeverRepeatingAlarm(reminder: reminder, reminderID: reminderID)
+        return
+    }
+    
     let content = UNMutableNotificationContent()
     content.title = title
     content.body = description
-    content.sound = soundType == "Alert" 
+    content.sound = soundType == "Alert"
         ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
         : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+
+    var triggers: [Date] = []
     
     let calendar = Calendar.current
-    let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
+    let startDate = dateAndTime
     
-    if repeat_type == "Custom", let repeatIntervals = repeatIntervals, let daysString = repeatIntervals.days {
-        // Handle custom repeat patterns
-        let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+    // Parse repeat_until_date
+    var endDate: Date? = nil
+    if repeat_until_date != "Forever" && !repeat_until_date.isEmpty {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        endDate = fmt.date(from: repeat_until_date)
+    }
+
+    // Helper to add dates for repeats
+    func addRepeatingDates(interval: DateComponents) {
+        var nextDate = startDate
+        let maxOccurrences = 100 // Prevent infinite loops
+        var count = 0
+        while (endDate == nil || nextDate <= endDate!) && count < maxOccurrences {
+            triggers.append(nextDate)
+            if let d = calendar.date(byAdding: interval, to: nextDate) {
+                nextDate = d
+            } else {
+                break
+            }
+            count += 1
+        }
+    }
+
+    switch repeat_type {
+    case "None":
+        triggers.append(startDate)
         
-        for (index, pattern) in patterns.enumerated() {
-            if let nextDate = calculateNextDateForPattern(pattern: pattern, from: dateAndTime) {
-                let dateComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: nextDate)
-                let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
-                let identifier = "\(baseIdentifier)-\(index)"
-                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-                
-                UNUserNotificationCenter.current().add(request) { error in
-                    if let error = error {
-                        print("Error adding custom notification: \(error)")
+    case "Daily":
+        addRepeatingDates(interval: DateComponents(day: 1))
+        
+    case "Weekly":
+        addRepeatingDates(interval: DateComponents(weekOfYear: 1))
+        
+    case "Monthly":
+        addRepeatingDates(interval: DateComponents(month: 1))
+        
+    case "Yearly":
+        addRepeatingDates(interval: DateComponents(year: 1))
+        
+    case "Custom":
+        if let repeatIntervals = repeatIntervals, let daysString = repeatIntervals.days {
+            let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+            for pattern in patterns {
+                var currentDate = startDate
+                let maxOccurrences = 100
+                var count = 0
+                while (endDate == nil || currentDate <= endDate!) && count < maxOccurrences {
+                    if let nextDate = calculateNextDateForPattern(pattern: pattern, from: currentDate) {
+                        if endDate == nil || nextDate <= endDate! {
+                            triggers.append(nextDate)
+                            currentDate = calendar.date(byAdding: .month, value: 1, to: nextDate) ?? nextDate
+                        } else {
+                            break
+                        }
                     } else {
-                        print("Scheduled custom notification for \(nextDate)")
+                        break
                     }
+                    count += 1
                 }
             }
         }
-    } else {
-        // Handle regular notifications
-        if repeat_type == "Daily" {
-            let dateComponents = calendar.dateComponents([.hour, .minute], from: dateAndTime)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Error adding daily notification: \(error)")
-                } else {
-                    print("Successfully added daily notification")
-                }
-            }
-        } else if repeat_type == "Weekly" {
-            let dateComponents = calendar.dateComponents([.weekday, .hour, .minute], from: dateAndTime)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Error adding weekly notification: \(error)")
-                } else {
-                    print("Successfully added weekly notification")
-                }
-            }
-        } else if repeat_type == "Monthly" {
-            let dateComponents = calendar.dateComponents([.day, .hour, .minute], from: dateAndTime)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Error adding monthly notification: \(error)")
-                } else {
-                    print("Successfully added monthly notification")
-                }
-            }
-        } else if repeat_type == "Yearly" {
-            let dateComponents = calendar.dateComponents([.month, .day, .hour, .minute], from: dateAndTime)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Error adding yearly notification: \(error)")
-                } else {
-                    print("Successfully added yearly notification")
-                }
-            }
-        } else {
-            // Non-repeating or monthly (monthly needs special handling)
-            let shouldRepeat = false
-            let dateComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: dateAndTime)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: shouldRepeat)
-            let request = UNNotificationRequest(identifier: baseIdentifier, content: content, trigger: trigger)
-            
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Error adding notification: \(error)")
-                } else {
-                    print("Successfully added notification for \(dateAndTime)")
-                }
+        
+    default:
+        triggers.append(startDate)
+    }
+
+    // Schedule notifications
+    for (index, triggerDate) in triggers.enumerated() {
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error adding notification: \(error)")
+            } else {
+                print("Scheduled notification \(identifier) for \(triggerDate)")
             }
         }
     }
@@ -175,93 +185,17 @@ func calculateNextDateForPattern(pattern: String, from baseDate: Date) -> Date? 
     return nil
 }
 
-//func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String) {
-//    let content = UNMutableNotificationContent()
-//    content.title = title
-//    content.body = description
-//    content.sound = soundType == "Alert"
-//        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
-//        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
-//
-//    var triggers: [Date] = []
-//    
-//    let calendar = Calendar.current
-//    let startDate = dateAndTime
-//    
-//    // Parse repeat_until_date
-//    var endDate: Date? = nil
-//    if repeat_until_date != "Forever" && !repeat_until_date.isEmpty {
-//        let fmt = DateFormatter()
-//        fmt.dateStyle = .medium
-//        endDate = fmt.date(from: repeat_until_date)
-//    }
-//
-//    // Helper to add dates for repeats
-//    func addRepeatingDates(interval: DateComponents) {
-//        var nextDate = startDate
-//        while endDate == nil || nextDate <= endDate! {
-//            triggers.append(nextDate)
-//            if let d = calendar.date(byAdding: interval, to: nextDate) {
-//                nextDate = d
-//            } else {
-//                break
-//            }
-//        }
-//    }
-//
-//    switch repeat_type {
-//    case "None":
-//        triggers.append(startDate)
-//        
-//    case "Daily":
-//        addRepeatingDates(interval: DateComponents(day: 1))
-//        
-//    case "Weekly":
-//        addRepeatingDates(interval: DateComponents(weekOfYear: 1))
-//        
-//    case "Custom":
-//        if let repeatIntervals = repeatIntervals, let daysString = repeatIntervals.days {
-//            let weekdays = daysString.split(separator: ",").compactMap { weekdayFromString(String($0)) }
-//            for weekday in weekdays {
-//                var nextDate = startDate
-//                while endDate == nil || nextDate <= endDate! {
-//                    let comps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: nextDate)
-//                    if let dayDate = calendar.nextDate(after: nextDate, matching: DateComponents(hour: calendar.component(.hour, from: startDate), minute: calendar.component(.minute, from: startDate), weekday: weekday), matchingPolicy: .nextTime) {
-//                        if endDate == nil || dayDate <= endDate! {
-//                            triggers.append(dayDate)
-//                            nextDate = calendar.date(byAdding: .weekOfYear, value: 1, to: dayDate) ?? dayDate.addingTimeInterval(604800)
-//                        } else {
-//                            break
-//                        }
-//                    } else {
-//                        break
-//                    }
-//                }
-//            }
-//        }
-//        
-//    default:
-//        triggers.append(startDate)
-//    }
-//
-//    // Schedule notifications
-//    for (index, triggerDate) in triggers.enumerated() {
-//        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate)
-//        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-//        let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)"
-//        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-//        UNUserNotificationCenter.current().add(request) { error in
-//            if let error = error {
-//                print("Error adding notification: \(error)")
-//            } else {
-//                print("Scheduled notification \(identifier) for \(triggerDate)")
-//            }
-//        }
-//    }
-//}
+
 
 func cancelAlarm(reminderID: String) {
-    let identifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
-    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
-    print("Cancelled notification with ID: \(identifier)")
+    let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
+    
+    // Cancel the base notification and all indexed variations
+    var identifiersToCancel = [baseIdentifier]
+    for i in 0..<100 {
+        identifiersToCancel.append("\(baseIdentifier)-\(i)")
+    }
+    
+    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
+    print("Cancelled notifications with base ID: \(baseIdentifier)")
 }
