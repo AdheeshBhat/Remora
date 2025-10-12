@@ -24,75 +24,75 @@ struct TodayRemindersExperience: View {
     @State private var reminders: [String: ReminderData] = [:]
     @State private var isLoading = true
 
+    private func reloadReminders() {
+        self.isLoading = true
+        firestoreManager.getRemindersForUser { fetchedReminders in
+            DispatchQueue.main.async {
+                self.reminders = fetchedReminders ?? [:]
+                self.isLoading = false
+            }
+        }
+    }
+
     var body: some View {
         VStack {
             Text("Today's Reminders")
                 .font(.title)
                 .underline()
 
-            if isLoading {
-                Spacer()
-                ProgressView("Loading...")
-                Spacer()
-            } else {
-                let filteredReminders = filterReminders(userData: reminders, period: "today", filteredDay: nil)
-                let visibleReminders = isHideCompletedReminders
-                ? filteredReminders.filter { !$0.value.isComplete }
-                : filteredReminders
-                
-                if visibleReminders.isEmpty {
-                    Spacer()
-                    Text("No pending reminders 🙂")
-                        .font(.title)
-                        .foregroundColor(.primary)
-                    Spacer()
-                } else {
-                    ScrollView {
-                        VStack {
-                            ForEach(visibleReminders.sorted(by: { $0.value.date < $1.value.date }), id: \.key) { (documentID, reminder) in
-                                ReminderRow(
-                                    cur_screen: $cur_screen,
-                                    title: getTitle(reminder: reminder),
-                                    time: getTimeFromReminder(reminder: reminder),
-                                    reminderDate: getMonthFromReminder(reminder: reminder),
-                                    reminder: reminder,
-                                    showEditButton: false,
-                                    showDeleteButton: false,
-                                    userID: 1,
-                                    dateKey: reminder.date,
-                                    documentID: documentID,
-                                    firestoreManager: firestoreManager,
-                                    onUpdate: nil
-                                )
+//            if isLoading {
+//                Spacer()
+//                ProgressView("Loading...")
+//                Spacer()
+//            } else {
+                Group {
+                    let filteredReminders = filterReminders(userData: reminders, period: "today", filteredDay: nil)
+                    let visibleReminders = isHideCompletedReminders
+                    ? filteredReminders.filter { !$0.value.isComplete }
+                    : filteredReminders
+                    
+                    if visibleReminders.isEmpty {
+                        Spacer()
+                        Text("No pending reminders 🙂")
+                            .font(.title)
+                            .foregroundColor(.primary)
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            VStack {
+                                ForEach(visibleReminders.sorted(by: { $0.value.date < $1.value.date }), id: \.key) { (documentID, reminder) in
+                                    ReminderRow(
+                                        cur_screen: $cur_screen,
+                                        title: getTitle(reminder: reminder),
+                                        time: getTimeFromReminder(reminder: reminder),
+                                        reminderDate: getMonthFromReminder(reminder: reminder),
+                                        reminder: reminder,
+                                        showEditButton: false,
+                                        showDeleteButton: false,
+                                        userID: 1,
+                                        dateKey: reminder.date,
+                                        documentID: documentID,
+                                        firestoreManager: firestoreManager,
+                                        onUpdate: {
+                                            reloadReminders()
+                                        }
+                                    )
+                                }
                             }
                         }
+                        .background(RoundedRectangle(cornerRadius: 12).stroke(Color.primary, lineWidth: 2))
+                        .padding(.horizontal)
                     }
-                    .background(RoundedRectangle(cornerRadius: 12).stroke(Color.primary, lineWidth: 2))
-                    .padding(.horizontal)
                 }
-            }
+            //}
 
             Spacer()
         }
         .onAppear {
-            firestoreManager.getRemindersForUser { fetchedReminders in
-                if let fetchedReminders = fetchedReminders {
-                    print("Fetched \(fetchedReminders.count) reminders")
-                    for (documentID, reminder) in fetchedReminders {
-                        print("DocumentID: \(documentID), Title: \(reminder.title)")
-                    }
-                    DispatchQueue.main.async {
-                        self.reminders = fetchedReminders
-                        self.isLoading = false
-                    }
-                } else {
-                    print("No reminders fetched")
-                    DispatchQueue.main.async {
-                        self.reminders = [:]
-                        self.isLoading = false
-                    }
-                }
-            }
+            reloadReminders()
+        }
+        .onChange(of: isHideCompletedReminders) { _, _ in
+            reloadReminders()
         }
     }
 }

@@ -7,7 +7,7 @@
 import SwiftUI
 
 
-struct CustomRepeatType: Codable {
+struct CustomRepeatType: Codable, Equatable {
     var days: String?
     //Weeks: [1 (every week), 2 (every 2 weeks), 3]
     //Months:  [1-13] (13 means all months are enabled)
@@ -24,7 +24,7 @@ struct CustomRepeatType: Codable {
 
 //UPDATE REPEAT SETTINGS TO HAVE PRIORITY
     //TEXTBOX for
-struct RepeatSettings: Codable {
+struct RepeatSettings: Codable, Equatable {
     var repeat_type: String //(None, daily, monthly, etc)
     var repeat_until_date: String // should match date field s (STRING IS TEMPORARY - CHANGE BACK TO DATE LATER)
     var repeatIntervals: CustomRepeatType?
@@ -38,7 +38,7 @@ struct RepeatSettings: Codable {
     
 }
 
-struct ReminderData: Codable {
+struct ReminderData: Codable, Equatable {
     var title: String
     var ID: Int
     var date: Date

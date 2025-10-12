@@ -159,24 +159,26 @@ struct RemindersScreen: View {
                         .foregroundColor(.primary)
                 }
                 if canResetDate == true {
-                    Button("Today") {
-                        swipeOffset = 0
-                        dayFilteredDay = Date.now
-                        weekFilteredDay = Date.now
-                        monthFilteredDay = Date.now
-                        canResetDate = false
+                    if !isEditingMonthYear {
+                        Button("Today") {
+                            swipeOffset = 0
+                            dayFilteredDay = Date.now
+                            weekFilteredDay = Date.now
+                            monthFilteredDay = Date.now
+                            canResetDate = false
+                        }
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(Color.green)
+                        .cornerRadius(16)
                     }
-                    .font(.body)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .background(Color.green)
-                    .cornerRadius(16)
                 }
-            }
+            } //VStack ending
             .padding(.horizontal)
-        }
+        } //VStack ending
     }
 
     private var remindersList: some View {
@@ -211,7 +213,7 @@ struct RemindersScreen: View {
                         .id("top")
                         .padding(.horizontal)
                         .padding(.bottom, 20)
-                        .onChange(of: filterPeriod) { _ in
+                        .onChange(of: filterPeriod) { _, _ in
                             proxy.scrollTo("top", anchor: .top)
                         }
                     }
@@ -262,7 +264,7 @@ struct RemindersScreen: View {
     }
 
     private var calendarView: some View {
-        CalendarView(cur_screen: $cur_screen, initialViewType: $calendarViewType, firestoreManager: firestoreManager)
+        CalendarView(cur_screen: $cur_screen, initialViewType: $calendarViewType, preloadedReminders: remindersForUser, firestoreManager: firestoreManager)
             .onDisappear {
                 if calendarViewType == "week" {
                     filterPeriod = "week"

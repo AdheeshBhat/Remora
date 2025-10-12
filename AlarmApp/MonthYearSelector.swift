@@ -80,7 +80,7 @@ struct MonthYearSelector: View {
                         Text("Done")
                             .font(.title2)
                             .fontWeight(.semibold)
-                            .foregroundColor(.green)
+                            .foregroundColor(.blue)
                     }
                     .padding(.horizontal)
 
@@ -94,10 +94,14 @@ struct MonthYearSelector: View {
                             filteredDay = currentDate
                         }
                     }) {
-                        Text("Reset")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.blue)
+                        Text("Today")
+                            .font(.body)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .background(Color.green)
+                            .cornerRadius(16)
                     }
                 }
             }

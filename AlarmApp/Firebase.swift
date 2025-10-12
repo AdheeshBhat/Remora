@@ -49,7 +49,7 @@ class FirestoreManager {
             do {
                 db.collection("users").document(currentUser.uid).collection("reminders").document(dateCreated).getDocument { document, error in
                     if let document = document, document.exists {
-                        print("Fetched reminder")
+                        //print("Fetched reminder")
                         completion(document)
                     } else {
                         print("Reminder does not exist")

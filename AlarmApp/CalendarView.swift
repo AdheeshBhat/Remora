@@ -68,6 +68,20 @@ class CalendarHelper {
         }
         return days
     }
+    
+    func calculateMonthOffset(from date: Date) -> Int {
+        let calendar = Calendar.current
+        let currentDate = Date()
+        let currentMonth = calendar.component(.month, from: currentDate)
+        let currentYear = calendar.component(.year, from: currentDate)
+        
+        let selectedMonth = calendar.component(.month, from: date)
+        let selectedYear = calendar.component(.year, from: date)
+        
+        // Calculate difference in months
+        let monthDiff = (selectedYear - currentYear) * 12 + (selectedMonth - currentMonth)
+        return monthDiff
+    }
 }
 
 func normalizeDate(_ date: Date) -> Date {
@@ -180,6 +194,7 @@ struct CalendarView: View {
     @State private var swipeOffset: Int = 0
     @State private var canResetDate: Bool = false
     @State private var isUsingPicker: Bool = false
+    var preloadedReminders: [String: ReminderData]? = nil
     let firestoreManager: FirestoreManager
 
     let minZoom: CGFloat = 1.0
@@ -300,7 +315,7 @@ struct CalendarView: View {
             .padding(.horizontal)
 
             // MARK: Month/Year Selector
-            HStack(spacing: 8) {
+            VStack(spacing: 4) {
                 if calendarViewType == "month" {
                     MonthYearSelector(
                         filteredDay: $monthFilteredDay,
@@ -335,23 +350,26 @@ struct CalendarView: View {
                 }
 
                 if canResetDate {
-                    Button(action: {
-                        swipeOffset = 0
-                        weekFilteredDay = Date.now
-                        monthFilteredDay = Date.now
-                        canResetDate = false
-                    }) {
-                        Text("Today")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
-                            .background(Color.green)
-                            .cornerRadius(12)
+                    if !isEditingMonthYear {
+                        //TODAY BUTTON
+                        Button(action: {
+                            swipeOffset = 0
+                            weekFilteredDay = Date.now
+                            monthFilteredDay = Date.now
+                            canResetDate = false
+                        }) {
+                            Text("Today")
+                                .font(.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 6)
+                                .background(Color.green)
+                                .cornerRadius(16)
+                        }
                     }
                 }
-            }
+            } //VStack ending
 
             // MARK: Calendar Grid
             GeometryReader { geometry in
@@ -390,9 +408,10 @@ struct CalendarView: View {
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .onChange(of: swipeOffset) { _, newValue in
-                        // Update monthFilteredDay when swiping (but not when picker is active)
-                        if !isEditingMonthYear {
+                        if calendarViewType == "month" {
                             monthFilteredDay = Calendar.current.date(byAdding: .month, value: swipeOffset, to: Date())
+                        } else {
+                            weekFilteredDay = Calendar.current.date(byAdding: .weekOfYear, value: swipeOffset, to: Date())
                         }
                         canResetDate = swipeOffset != 0
                     }
@@ -464,11 +483,16 @@ struct CalendarView: View {
         }
         .onAppear {
             calendarViewType = initialViewType
-            firestoreManager.getRemindersForUser { fetchedReminders in
-                if let fetchedReminders = fetchedReminders {
-                    viewModel.loadReminders(from: fetchedReminders)
+            if let preloadedReminders = preloadedReminders {
+                viewModel.loadReminders(from: preloadedReminders)
+            } else {
+                firestoreManager.getRemindersForUser { fetchedReminders in
+                    if let fetchedReminders = fetchedReminders {
+                        viewModel.loadReminders(from: fetchedReminders)
+                    }
                 }
             }
+            
             weekFilteredDay = viewModel.selectedDate
             cur_screen = .CalendarScreen
         }
@@ -480,6 +504,22 @@ struct CalendarView: View {
                 monthFilteredDay = newValue
             } else {
                 weekFilteredDay = newValue
+            }
+        }
+        .onChange(of: monthFilteredDay) { _, newDate in
+            guard let newDate = newDate else { return }
+            // Update calendar view for the new month
+            swipeOffset = helper.calculateMonthOffset(from: newDate)
+            canResetDate = swipeOffset != 0
+            // Optionally, reload reminders if needed
+            if let preloadedReminders = preloadedReminders {
+                viewModel.loadReminders(from: preloadedReminders)
+            } else {
+                firestoreManager.getRemindersForUser { fetchedReminders in
+                    if let fetchedReminders = fetchedReminders {
+                        viewModel.loadReminders(from: fetchedReminders)
+                    }
+                }
             }
         }
 
