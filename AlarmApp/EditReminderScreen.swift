@@ -14,7 +14,7 @@ struct EditReminderScreen: View {
     @State var showReminderNameAlert: Bool = false
     @State var localTitle: String = ""
     @State var localDescription: String = ""
-    @State var localEditScreenPriority: String = "Medium"
+    @State var localEditScreenPriority: String = "Low"
     @State var localEditScreenIsLocked: Bool = false
     @State var localEditScreenRepeatSetting: String = "None"
     @State var localEditScreenRepeatUntil: String = "Forever"
@@ -199,21 +199,25 @@ struct EditReminderScreen: View {
                                     // Cancel the old notification and set a new one
                                     cancelAlarm(reminderID: reminderID)
                                     if !isComplete {
-                                        setAlarm(
-                                            dateAndTime: localDate,
-                                            title: localTitle,
-                                            description: localDescription,
-                                            repeat_type: localEditScreenRepeatSetting,
-                                            repeat_until_date: localEditScreenRepeatUntil,
-                                            repeatIntervals: customRepeatType,
-                                            reminderID: reminderID,
-                                            soundType: selectedSound
-                                        )
+                                        firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                            let soundType = (soundValue as? String) ?? "Chord"
+                                            setAlarm(
+                                                dateAndTime: localDate,
+                                                title: localTitle,
+                                                description: localDescription,
+                                                repeat_type: localEditScreenRepeatSetting,
+                                                repeat_until_date: localEditScreenRepeatUntil,
+                                                repeatIntervals: customRepeatType,
+                                                reminderID: reminderID,
+                                                soundType: soundType
+                                            )
+                                        }
+                                        print(selectedSound)
                                     }
                                     
                                     onUpdate?()
                                 }
-                            }
+                            } //if statement ending
                         }
                         
                         presentationMode.wrappedValue.dismiss()

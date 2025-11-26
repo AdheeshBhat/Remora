@@ -313,7 +313,7 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                     let fmt = DateFormatter()
                     fmt.dateFormat = "yyyy-MM-dd"
                     if let endDate = fmt.date(from: reminder.repeatSettings.repeat_until_date),
-                       currentDate > endDate {
+                       calendar.startOfDay(for: currentDate) > calendar.startOfDay(for: endDate) {
                         break
                     }
                 }
@@ -417,7 +417,7 @@ func expandRepeatingRemindersForCalendar(userData: [String: ReminderData], start
                     let fmt = DateFormatter()
                     fmt.dateFormat = "yyyy-MM-dd"
                     if let endDate = fmt.date(from: reminder.repeatSettings.repeat_until_date),
-                       currentDate > endDate {
+                       calendar.startOfDay(for: currentDate) > calendar.startOfDay(for: endDate) {
                         break
                     }
                 }

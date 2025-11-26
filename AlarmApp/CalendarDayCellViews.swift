@@ -168,7 +168,7 @@ struct WeekDayCellView: View {
         )
         .padding(1)
         .onAppear {
-            firestoreManager.getRemindersForUser { fetched in
+            firestoreManager.getRemindersForUser() { fetched in
                 remindersForUser = fetched ?? [:]
             }
         }
@@ -205,4 +205,3 @@ struct ReminderCell: View {
         }
     }
 }
-

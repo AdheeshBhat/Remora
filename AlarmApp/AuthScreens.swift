@@ -15,37 +15,28 @@ struct LoginScreen: View {
     @State private var errorMessage: String = ""
     @State private var navigateToHome: Bool = false
     @State private var showRegistration: Bool = false
+    @State private var navigateToCaretakerHome: Bool = false
     let firestoreManager = FirestoreManager()
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 30) {
-                    Spacer(minLength: 60)
-                    
-                    // to do i hardcoded icon, but we should put img of our logo
-                    VStack(spacing: 16) {
-                        Text("🌟")
-                            .font(.system(size: 80))
+                VStack {
+                    VStack() {
+                        Image("Remura Logo")
+                            .resizable()
+                            .scaledToFit()
+                        //.frame(width: 500, height: 500)
+                        //.font(.system(size: 80))
                         
-                        Text("Hello there!") // To Do some welcome msg
-                            .font(.title)
-                            .fontWeight(.medium)
-                            .foregroundColor(.blue)
-                        
-                        Text("decide name lol") // to DO
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
-                        
-                        Text("something we can say here if we want") // To DO
-                            .font(.title3)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
+//                        Text("Reminders made easy for seniors & caregivers")
+//                            .font(.title2)
+//                            .foregroundColor(.primary)
+//                            .multilineTextAlignment(.center)
+//                            .padding(.horizontal)
                     }
-                    .padding(.bottom, 20)
-                    
+                    //.padding(.bottom, 20)
+
                     // Login Form
                     VStack(spacing: 20) {
                         VStack(alignment: .leading, spacing: 8) {
@@ -131,6 +122,9 @@ struct LoginScreen: View {
             .navigationDestination(isPresented: $navigateToHome) {
                 HomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
             }
+            .navigationDestination(isPresented: $navigateToCaretakerHome) {
+                CaretakerHomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            }
             .navigationDestination(isPresented: $showRegistration) {
                 RegistrationScreen(cur_screen: $cur_screen)
             }
@@ -147,7 +141,13 @@ struct LoginScreen: View {
                 errorMessage = ""
                 // Navigate to HomeScreen
                 cur_screen = .HomeScreen
-                navigateToHome = true
+                firestoreManager.checkIfCaretaker { isCaretaker in
+                    if isCaretaker {
+                        navigateToCaretakerHome = true
+                    } else {
+                        navigateToHome = true
+                    }
+                }
                 
             }
         }
@@ -157,12 +157,17 @@ struct LoginScreen: View {
 struct RegistrationScreen: View {
     @Binding var cur_screen: Screen
     @State private var email: String = ""
-    @State private var name: String = ""
+    @State private var firstName: String = ""
+    @State private var lastName: String = ""
+    @State private var username: String = ""
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
     @State private var isCaretaker: Bool = false
     @State private var errorMessage: String = ""
     @State private var navigateToHome: Bool = false
+    @State private var navigateToCaretakerHome: Bool = false
+    @State private var hasConsented: Bool = false
+    
     let firestoreManager = FirestoreManager()
 
     var body: some View {
@@ -175,12 +180,25 @@ struct RegistrationScreen: View {
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
 
-            TextField("Full Name", text: $name)
+            TextField("First Name", text: $firstName)
                 .autocapitalization(.words)
                 .padding()
                 .background(Color(.systemGray6))
                 .cornerRadius(8)
-                .textContentType(.name)
+                .textContentType(.givenName)
+            
+            TextField("Last Name", text: $lastName)
+                .autocapitalization(.words)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                .textContentType(.familyName)
+            
+            TextField("Username", text: $username)
+                .autocapitalization(.none)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
 
             SecureField("Password", text: $password)
                 .padding()
@@ -197,6 +215,9 @@ struct RegistrationScreen: View {
             Toggle("Caretaker", isOn: $isCaretaker)
                 .padding()
 
+            PrivacyConsentCheckbox(isChecked: $hasConsented)
+                .padding(.horizontal)
+            
             Button(action: {
                 register()
             }) {
@@ -217,6 +238,9 @@ struct RegistrationScreen: View {
         .navigationDestination(isPresented: $navigateToHome) {
             HomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
         }
+        .navigationDestination(isPresented: $navigateToCaretakerHome) {
+            CaretakerHomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+        }
     }
 
     private func register() {
@@ -225,29 +249,95 @@ struct RegistrationScreen: View {
             errorMessage = "Passwords do not match."
             return
         }
-        Auth.auth().createUser(withEmail: email, password: password) { authResult, error in
-            if let error = error {
-                errorMessage = error.localizedDescription
-            } else if let user = authResult?.user {
-                errorMessage = ""
-                // Save additional user info to Firestore
-                let userData: [String: Any] = [
-                    "fullName": name,
-                    "isCaretaker": isCaretaker,
-                    "email": email,
-                    "uid": user.uid
-                ]
-                firestoreManager.saveUserData(userId: user.uid, data: userData) { error in
+        guard !username.isEmpty else {
+            errorMessage = "Please enter a username."
+            return
+        }
+        guard hasConsented else {
+            errorMessage = "You must agree to the Privacy Policy to continue."
+            return
+        }
+        
+        //Checks if username is taken
+        firestoreManager.getUIDFromUsername(username: username) { existingUID in
+            if existingUID != nil {
+                errorMessage = "That username is already taken."
+            } else {
+                Auth.auth().createUser(withEmail: email, password: password) { authResult, error in
                     if let error = error {
                         errorMessage = error.localizedDescription
-                    } else {
-                        // Navigate to HomeScreen
-                        cur_screen = .HomeScreen
-                        navigateToHome = true
-                    }
-                }
-            }
-        }
-    }
+                    } else if let user = authResult?.user {
+                        errorMessage = ""
+                        // Save additional user info to Firestore
+                        let userData: [String: Any] = [
+                            "firstName": firstName,
+                            "lastName": lastName,
+                            "username": username,
+                            "isCaretaker": isCaretaker,
+                            "email": email,
+                            "uid": user.uid
+                        ]
+                        firestoreManager.saveUserData(userId: user.uid, data: userData) { error in
+                            if let error = error {
+                                errorMessage = error.localizedDescription
+                            } else {
+                                // Save username mapping for lookup
+                                firestoreManager.saveUsernameMapping(username: username, uid: user.uid) { mappingError in
+                                    if let mappingError = mappingError {
+                                        print("Error saving username mapping: \(mappingError.localizedDescription)")
+                                    } else {
+                                        print("Username mapping saved successfully")
+                                    }
+                                }
+                                
+                                // Navigate to appropriate HomeScreen
+                                cur_screen = .HomeScreen
+                                if isCaretaker {
+                                    navigateToCaretakerHome = true
+                                } else {
+                                    navigateToHome = true
+                                }
+                            }
+                        } //saveUserData
+                    } //else if ending
+                } //createUser ending
+            } //else ending
+        } //getUIDFromUsername ending
+        
+    } //private func ending
 }
 
+
+struct PrivacyConsentCheckbox: View {
+    @Binding var isChecked: Bool
+    let privacyPolicyURL = "https://sites.google.com/view/remura/privacy-policy"
+
+    var body: some View {
+        HStack {
+            VStack {
+                // Combined text with inline link
+                Text(.init("I consent to data collection as outlined in the [Privacy Policy](\(privacyPolicyURL))"))
+                    .font(.footnote)
+                    .foregroundColor(.primary)
+                    .onTapGesture {
+                        if let url = URL(string: privacyPolicyURL) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                
+            }
+            
+            VStack {
+                Button(action: {
+                    isChecked.toggle()
+                }) {
+                    Image(systemName: isChecked ? "checkmark.square.fill" : "square")
+                        .foregroundColor(isChecked ? .green : .gray)
+                        .font(.title2)
+                }
+            }
+            .padding(.horizontal)
+        }
+        
+    }
+}

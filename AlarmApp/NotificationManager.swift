@@ -17,17 +17,20 @@ class NotificationManager: ObservableObject {
     
     func scheduleForeverRepeatingAlarm(reminder: ReminderData, reminderID: String) {
         guard reminder.repeatSettings.repeat_until_date == "Forever" else {
-            // Use existing setAlarm function for non-forever alarms
-            setAlarm(
-                dateAndTime: reminder.date,
-                title: reminder.title,
-                description: reminder.description,
-                repeat_type: reminder.repeatSettings.repeat_type,
-                repeat_until_date: reminder.repeatSettings.repeat_until_date,
-                repeatIntervals: reminder.repeatSettings.repeatIntervals,
-                reminderID: reminderID,
-                soundType: "Alert"
-            )
+            FirestoreManager().loadUserSettings(field: "selectedSound") { soundValue in
+                let soundType = (soundValue as? String) ?? "Chord"
+                // Use existing setAlarm function for non-forever alarms
+                setAlarm(
+                    dateAndTime: reminder.date,
+                    title: reminder.title,
+                    description: reminder.description,
+                    repeat_type: reminder.repeatSettings.repeat_type,
+                    repeat_until_date: reminder.repeatSettings.repeat_until_date,
+                    repeatIntervals: reminder.repeatSettings.repeatIntervals,
+                    reminderID: reminderID,
+                    soundType: soundType
+                )
+            }
             return
         }
         
@@ -39,7 +42,25 @@ class NotificationManager: ObservableObject {
         let content = UNMutableNotificationContent()
         content.title = reminder.title
         content.body = reminder.description
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+        FirestoreManager().loadUserSettings(field: "selectedSound") { soundValue in
+            let soundType = (soundValue as? String) ?? "Chord"
+            let soundFileName: String
+
+            switch soundType.lowercased() {
+            case "alert":
+                soundFileName = "notification_alert.wav"
+            case "xylophone":
+                soundFileName = "xylophone.wav"
+            case "marimba 1":
+                soundFileName = "marimba1.wav"
+            case "marimba 2":
+                soundFileName = "marimba2.wav"
+            default:
+                soundFileName = "chord_iphone.WAV"
+            }
+
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(soundFileName))
+        }
         
         var scheduledDates: [Date] = []
         let calendar = Calendar.current

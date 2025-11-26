@@ -357,7 +357,7 @@ struct RemindersScreen: View {
     }
     
     private func loadReminders() {
-        firestoreManager.getRemindersForUser() { reminders in
+        firestoreManager.getRemindersForUser { reminders in
             self.remindersForUser = reminders ?? [:]
         }
     }
@@ -459,17 +459,21 @@ struct ReminderRow: View {
                                        let days = repeatIntervals["days"] as? String {
                                         customRepeat = CustomRepeatType(days: days)
                                     }
-
-                                    setAlarm(
-                                        dateAndTime: date,
-                                        title: title,
-                                        description: description,
-                                        repeat_type: repeatType,
-                                        repeat_until_date: repeatUntil,
-                                        repeatIntervals: customRepeat,
-                                        reminderID: documentID,
-                                        soundType: "Chord" // or load saved sound from Firestore if available
-                                    )
+                                    
+                                    firestoreManager.loadUserSettings(field: "selectedSound") {soundValue in
+                                        let soundType = (soundValue as? String) ?? "Chord"
+                                        setAlarm(
+                                            dateAndTime: date,
+                                            title: title,
+                                            description: description,
+                                            repeat_type: repeatType,
+                                            repeat_until_date: repeatUntil,
+                                            repeatIntervals: customRepeat,
+                                            reminderID: documentID,
+                                            soundType: soundType 
+                                        )
+                                    }
+                                    
                                     print("Reminder has been marked as incomplete and alarm rescheduled for \(date)")
                                 }
                             }

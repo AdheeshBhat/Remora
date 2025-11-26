@@ -200,16 +200,20 @@ struct CreateReminderScreen: View {
                             let reminderID = getExactStringFromCurrentDate()
                             firestoreManager.setReminder(reminderID: reminderID, reminder: reminder)
                             presentationMode.wrappedValue.dismiss()
-                            setAlarm(
-                                dateAndTime: date,
-                                title: title,
-                                description: description,
-                                repeat_type: reminder.repeatSettings.repeat_type,
-                                repeat_until_date: reminder.repeatSettings.repeat_until_date,
-                                repeatIntervals: reminder.repeatSettings.repeatIntervals,
-                                reminderID: reminderID,
-                                soundType: selectedSound
-                            )
+                            firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                let soundType = (soundValue as? String) ?? "Chord"
+
+                                setAlarm(
+                                    dateAndTime: date,
+                                    title: title,
+                                    description: description,
+                                    repeat_type: reminder.repeatSettings.repeat_type,
+                                    repeat_until_date: reminder.repeatSettings.repeat_until_date,
+                                    repeatIntervals: reminder.repeatSettings.repeatIntervals,
+                                    reminderID: reminderID,
+                                    soundType: soundType
+                                )
+                            }
                         }
                     }) {
                         Text("Save New Reminder")

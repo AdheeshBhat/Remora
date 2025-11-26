@@ -14,22 +14,48 @@ struct SettingsScreen: View {
     @State private var isDropdownVisible = false
     @State var selectedSound: String = ""
     @State private var showLogoutAlert = false
+    @State private var isCaretaker = false
+    @State private var username: String = ""
     let firestoreManager: FirestoreManager
     
     var body: some View {
-        VStack {
-            titleSection
-            accountHeading
-            notificationRow
-            soundPicker
-            logoutButton
-            Spacer()
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack {
+                    titleSection
+                    accountHeading
+                    if !isCaretaker {
+                        usernameSection
+                    }
+                    notificationRow
+                    soundPicker
+                    logoutButton
+                    
+                }
+            }
             saveSettingsButton
+                .padding(.bottom)
             navBar
         }
         .onAppear {
             cur_screen = .SettingsScreen
             loadSettings()
+            firestoreManager.checkIfCaretaker { result in
+                DispatchQueue.main.async {
+                    self.isCaretaker = result
+                    if !result {
+                        firestoreManager.getUsername { fetchedUsername in
+                            DispatchQueue.main.async {
+                                if let fetchedUsername = fetchedUsername {
+                                    self.username = fetchedUsername
+                                } else {
+                                    self.username = ""
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -66,11 +92,61 @@ extension SettingsScreen {
             .padding(.bottom)
     }
     
+    private var usernameSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Rounded rectangle container for Username label + value
+            HStack {
+                Text("Username:")
+                    .font(.headline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text(username)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+            }
+            .padding(16)
+            .background(Color.blue.opacity(0.1))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+            )
+            .padding(.horizontal)
+            .padding(.bottom)
+            
+            // Manage Account button
+            NavigationLink(destination: ManageAccountScreen(firestoreManager: firestoreManager)) {
+                Text("Manage Account")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .padding(.vertical, 12) // reduce vertical padding
+                    .padding(.horizontal, 16) // match other rectangles
+                    .frame(maxWidth: .infinity, alignment: .leading) // expand full width
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                    )
+                    .padding(.horizontal) // add space from screen edges
+            }
+        }
+        .padding(.bottom)
+        
+    }
+    
+    
     private var notificationRow: some View {
         HStack {
             NotificationBellExperience(cur_screen: $cur_screen)
             Text("Notifications")
-                .font(.title3)
+                .font(.title)
+                .fontWeight(.semibold)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundColor(.primary)
         }
@@ -97,7 +173,7 @@ extension SettingsScreen {
             
             if isDropdownVisible {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(["Chord", "Alert"], id: \.self) { sound in
+                    ForEach(["Chord", "Alert", "Xylophone", "Marimba 1", "Marimba 2"], id: \.self) { sound in
                         Button(action: {
                             selectedSound = sound
                             isDropdownVisible = false
@@ -150,6 +226,7 @@ extension SettingsScreen {
         }
     }
     
+    
     private var saveSettingsButton: some View {
         Button(action: {
             firestoreManager.saveUserSettings(field: "selectedSound", value: selectedSound) { error in
@@ -176,7 +253,11 @@ extension SettingsScreen {
     }
     
     private var navBar: some View {
-        NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+        Group {
+            if !isCaretaker {
+                NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            }
+        }
     }
     
     private func logout() {

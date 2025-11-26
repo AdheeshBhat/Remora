@@ -9,14 +9,15 @@ import SwiftUI
 
 struct NavigationBarExperience: View {
     @Environment(\.dismiss) var dismiss
+    
     @Binding var cur_screen: Screen
-    let firestoreManager: FirestoreManager
+    @ObservedObject var firestoreManager: FirestoreManager
     
     var body: some View {
         VStack {
             VStack {
                 Rectangle()
-                    .frame(width: 400, height: 2)
+                    .frame(width: .infinity, height: 2)
                 
             }
             //.padding(.top, 300)

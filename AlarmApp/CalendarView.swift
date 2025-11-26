@@ -91,6 +91,8 @@ func normalizeDate(_ date: Date) -> Date {
 class CalendarViewModel: ObservableObject {
     @Published var selectedDate: Date = Date()
     @Published var remindersByDate: [Date: [CalendarReminder]] = [:]
+    
+    var seniorUID: String? = nil
 
     func remindersOnGivenDay(for date: Date) -> [CalendarReminder] {
         remindersByDate[normalizeDate(date)] ?? []
@@ -194,6 +196,8 @@ struct CalendarView: View {
     @State private var swipeOffset: Int = 0
     @State private var canResetDate: Bool = false
     @State private var isUsingPicker: Bool = false
+    @State private var seniorUID: String? = nil
+    
     var preloadedReminders: [String: ReminderData]? = nil
     let firestoreManager: FirestoreManager
 
@@ -483,6 +487,7 @@ struct CalendarView: View {
         }
         .onAppear {
             calendarViewType = initialViewType
+            
             if let preloadedReminders = preloadedReminders {
                 viewModel.loadReminders(from: preloadedReminders)
             } else {

@@ -45,9 +45,22 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
     let content = UNMutableNotificationContent()
     content.title = title
     content.body = description
-    content.sound = soundType == "Alert"
-        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
-        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+//    content.sound = soundType == "Alert"
+//        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+//        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+    if soundType == "Alert" {
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+    } else if soundType == "Chord" {
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+    } else if soundType == "Xylophone" {
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("xylophone.wav"))
+    } else if soundType == "Marimba 1" {
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("marimba1.wav"))
+    } else if soundType == "Marimba 2" {
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("marimba2.wav"))
+    } else {
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+    }
 
     var triggers: [Date] = []
     
@@ -60,6 +73,9 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
         endDate = fmt.date(from: repeat_until_date)
+        var single_day = DateComponents()
+        single_day.day = 1
+        endDate = calendar.date(byAdding: single_day, to: endDate!)
     }
 
     // Helper to add dates for repeats
