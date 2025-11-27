@@ -113,6 +113,7 @@ class FirestoreManager: ObservableObject {
 
                     let isComplete = data["isComplete"] as? Bool ?? false
                     let isLocked = data["isLocked"] as? Bool ?? false
+                    let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
 
                     let dateFromField: Date? = {
                         if let ts = data["date"] as? Timestamp {
@@ -156,7 +157,8 @@ class FirestoreManager: ObservableObject {
                         priority: priority,
                         isComplete: isComplete,
                         author: author,
-                        isLocked: isLocked
+                        isLocked: isLocked,
+                        caretakerAlertDelay: caretakerAlertDelay
                     )
 
                     // Use document ID as key instead of date
@@ -354,6 +356,7 @@ class FirestoreManager: ObservableObject {
                     let author = data["author"] as? String ?? "user"
                     let isComplete = data["isComplete"] as? Bool ?? false
                     let isLocked = data["isLocked"] as? Bool ?? false
+                    let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
                     
                     let dateFromField: Date?
                     if let ts = data["date"] as? Timestamp {
@@ -391,7 +394,8 @@ class FirestoreManager: ObservableObject {
                         priority: priority,
                         isComplete: isComplete,
                         author: author,
-                        isLocked: isLocked
+                        isLocked: isLocked,
+                        caretakerAlertDelay: caretakerAlertDelay
                     )
                     
                     remindersDict[documentID] = reminder

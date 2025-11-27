@@ -23,6 +23,7 @@ struct EditReminderScreen: View {
     @State private var isComplete: Bool = false
     @State var selectedSound: String = "Chord"
     @State var hasLoadedFromFirebase: Bool = false
+    @State private var caretakerAlertDelay: TimeInterval = 1800
     let firestoreManager: FirestoreManager
     let reminderID: String
     let onUpdate: (() -> Void)?
@@ -147,7 +148,8 @@ struct EditReminderScreen: View {
                     .padding(16)
                     .background(Color.blue.opacity(0.1))
                     .cornerRadius(12)
-
+                    
+                    //PRIORITY
                     HStack {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundColor(.blue)
@@ -161,6 +163,43 @@ struct EditReminderScreen: View {
                         ) {
                             HStack {
                                 Text(localEditScreenPriority)
+                                    .foregroundColor(.primary)
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .disabled(localTitle.isEmpty)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            if localTitle.isEmpty {
+                                showReminderNameAlert = true
+                            }
+                        })
+                    }
+                    .padding(16)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(12)
+                    
+                    //CARETAKER ALERT SETTINGS
+                    HStack {
+                        Image(systemName: "bell")
+                            .foregroundColor(.blue)
+                        Text("Caretaker Alert Delay")
+                            .foregroundColor(.primary)
+                            .font(.headline)
+                            .fontWeight(.medium)
+                        Spacer()
+                        NavigationLink(
+                            destination: CaretakerAlertSettingsScreen(
+                                cur_screen: $cur_screen,
+                                title: localTitle,
+                                selectedDelay: $caretakerAlertDelay,
+                                firestoreManager: firestoreManager,
+                                reminderID: reminderID,
+                                onDone: nil
+                            )
+                        ) {
+                            HStack {
+                                Text(humanReadableDelay(from: caretakerAlertDelay))
                                     .foregroundColor(.primary)
                                 Image(systemName: "chevron.right")
                                     .foregroundColor(.blue)
@@ -190,7 +229,8 @@ struct EditReminderScreen: View {
                                 "repeatSettings.repeat_type": localEditScreenRepeatSetting,
                                 "repeatSettings.repeat_until_date": localEditScreenRepeatUntil,
                                 "repeatSettings.repeatIntervals": repeatIntervalsDict,
-                                "date": Timestamp(date: localDate)]
+                                "date": Timestamp(date: localDate),
+                                "caretakerAlertDelay": caretakerAlertDelay]
                         ) { success in
                             if success {
                                 DispatchQueue.main.async {
@@ -209,10 +249,12 @@ struct EditReminderScreen: View {
                                                 repeat_until_date: localEditScreenRepeatUntil,
                                                 repeatIntervals: customRepeatType,
                                                 reminderID: reminderID,
-                                                soundType: soundType
+                                                soundType: soundType,
+                                                caretakerAlertDelay: caretakerAlertDelay
                                             )
+                                            print("soundType is " + soundType)
                                         }
-                                        print(selectedSound)
+                                        
                                     }
                                     
                                     onUpdate?()
@@ -278,6 +320,9 @@ struct EditReminderScreen: View {
                             localCustomPatterns = Set(days.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
                         }
                     }
+                    if let delay = data["caretakerAlertDelay"] as? TimeInterval {
+                        caretakerAlertDelay = delay
+                    }
                     // Update completion status
                     if let complete = data["isComplete"] as? Bool {
                         isComplete = complete
@@ -291,3 +336,25 @@ struct EditReminderScreen: View {
 }
 
 
+
+// Helper for human readable delay
+extension EditReminderScreen {
+    func humanReadableDelay(from delay: TimeInterval) -> String {
+        let minutes = Int(delay) / 60
+        if minutes < 60 {
+            return "\(minutes) min" + (minutes == 1 ? "" : "s")
+        }
+        let hours = Double(minutes) / 60.0
+        if hours == floor(hours) {
+            let h = Int(hours)
+            return "\(h) hr" + (h == 1 ? "" : "s")
+        }
+        // For non-whole hours, show as "1 hr 30 mins"
+        let h = Int(hours)
+        let m = minutes % 60
+        if m == 0 {
+            return "\(h) hr" + (h == 1 ? "" : "s")
+        }
+        return "\(h) hr" + (h == 1 ? "" : "s") + " \(m) min" + (m == 1 ? "" : "s")
+    }
+}

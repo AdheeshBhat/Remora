@@ -453,6 +453,7 @@ struct ReminderRow: View {
                                     let repeatSettings = data["repeatSettings"] as? [String: Any]
                                     let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
                                     let repeatUntil = repeatSettings?["repeat_until_date"] as? String ?? "Forever"
+                                    let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
 
                                     var customRepeat: CustomRepeatType? = nil
                                     if let repeatIntervals = repeatSettings?["repeatIntervals"] as? [String: Any],
@@ -470,7 +471,8 @@ struct ReminderRow: View {
                                             repeat_until_date: repeatUntil,
                                             repeatIntervals: customRepeat,
                                             reminderID: documentID,
-                                            soundType: soundType 
+                                            soundType: soundType,
+                                            caretakerAlertDelay: caretakerAlertDelay
                                         )
                                     }
                                     

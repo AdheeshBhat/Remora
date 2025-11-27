@@ -24,6 +24,7 @@ struct CreateReminderScreen: View {
     @State private var isLocked: Bool = false
     @State private var showReminderNameAlert: Bool = false
     @State var selectedSound: String = "Chord"
+    @State private var caretakerAlertDelay: TimeInterval = 1800 // Default 30 mins
     let firestoreManager: FirestoreManager
     var formattedDate: String {
         let formatter = DateFormatter()
@@ -180,6 +181,40 @@ struct CreateReminderScreen: View {
                     .background(Color.blue.opacity(0.1))
                     .cornerRadius(12)
 
+                    NavigationLink(
+                        destination: CaretakerAlertSettingsScreen(
+                            cur_screen: $cur_screen,
+                            title: title,
+                            selectedDelay: $caretakerAlertDelay,
+                            firestoreManager: firestoreManager,
+                            reminderID: getExactStringFromCurrentDate(),
+                            onDone: nil
+                        )
+                    ) {
+                        HStack {
+                            Image(systemName: "bell")
+                                .foregroundColor(.blue)
+                            Text("Caretaker Alert")
+                                .foregroundColor(.primary)
+                                .font(.headline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text(humanReadableCaretakerDelay(caretakerAlertDelay))
+                                .foregroundColor(.primary)
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.blue)
+                        }
+                        .padding(16)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+                    .disabled(title.isEmpty)
+                    .simultaneousGesture(TapGesture().onEnded {
+                        if title.isEmpty {
+                            showReminderNameAlert = true
+                        }
+                    })
+
                     Button(action: {
                         if title.isEmpty {
                             showReminderNameAlert = true
@@ -194,7 +229,8 @@ struct CreateReminderScreen: View {
                                 priority: priority,
                                 isComplete: isComplete,
                                 author: author,
-                                isLocked: isLocked
+                                isLocked: isLocked,
+                                caretakerAlertDelay: caretakerAlertDelay
                             )
                             //let uniqueID = Date.now
                             let reminderID = getExactStringFromCurrentDate()
@@ -211,7 +247,8 @@ struct CreateReminderScreen: View {
                                     repeat_until_date: reminder.repeatSettings.repeat_until_date,
                                     repeatIntervals: reminder.repeatSettings.repeatIntervals,
                                     reminderID: reminderID,
-                                    soundType: soundType
+                                    soundType: soundType,
+                                    caretakerAlertDelay: caretakerAlertDelay
                                 )
                             }
                         }
@@ -243,4 +280,20 @@ struct CreateReminderScreen: View {
     }
 }
 
-
+// Helper to display caretaker alert delay as human-readable
+func humanReadableCaretakerDelay(_ delay: TimeInterval) -> String {
+    switch Int(delay) {
+    case 600: return "10 mins"
+    case 1800: return "30 mins"
+    case 3600: return "1 hr"
+    case 7200: return "2 hrs"
+    case 14400: return "4 hrs"
+    case 28800: return "8 hrs"
+    default:
+        let minutes = Int(delay) / 60
+        if minutes < 60 { return "\(minutes) mins" }
+        let hours = minutes / 60
+        let remainingMins = minutes % 60
+        return remainingMins == 0 ? "\(hours) hr" : "\(hours) hr \(remainingMins) min"
+    }
+}

@@ -20,7 +20,9 @@ func requestNotificationPermission() {
 }
 
 
-func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String) {
+func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String, caretakerAlertDelay: TimeInterval) {
+    print("setAlarm called for reminderID: \(reminderID), repeat_type: \(repeat_type), repeat_until_date: \(repeat_until_date), date: \(dateAndTime)")
+
     // Handle forever repeating alarms with NotificationManager
     if repeat_until_date == "Forever" {
         let reminder = ReminderData(
@@ -36,7 +38,8 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
             priority: "Low",
             isComplete: false,
             author: "user",
-            isLocked: false
+            isLocked: false,
+            caretakerAlertDelay: caretakerAlertDelay
         )
         NotificationManager.shared.scheduleForeverRepeatingAlarm(reminder: reminder, reminderID: reminderID)
         return
@@ -48,6 +51,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
 //    content.sound = soundType == "Alert"
 //        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
 //        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+    print("soundType is " + soundType)
     if soundType == "Alert" {
         content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
     } else if soundType == "Chord" {
@@ -138,6 +142,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
     }
 
     // Schedule notifications
+    print("Triggers to schedule for reminder \(reminderID): \(triggers)")
     for (index, triggerDate) in triggers.enumerated() {
         let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)

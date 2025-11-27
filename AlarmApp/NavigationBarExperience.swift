@@ -17,7 +17,7 @@ struct NavigationBarExperience: View {
         VStack {
             VStack {
                 Rectangle()
-                    .frame(width: .infinity, height: 2)
+                    .frame(maxWidth: .infinity, maxHeight: 2)
                 
             }
             //.padding(.top, 300)

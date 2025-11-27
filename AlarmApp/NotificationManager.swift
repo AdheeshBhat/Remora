@@ -28,7 +28,8 @@ class NotificationManager: ObservableObject {
                     repeat_until_date: reminder.repeatSettings.repeat_until_date,
                     repeatIntervals: reminder.repeatSettings.repeatIntervals,
                     reminderID: reminderID,
-                    soundType: soundType
+                    soundType: soundType,
+                    caretakerAlertDelay: reminder.caretakerAlertDelay
                 )
             }
             return
@@ -60,48 +61,49 @@ class NotificationManager: ObservableObject {
             }
 
             content.sound = UNNotificationSound(named: UNNotificationSoundName(soundFileName))
-        }
-        
-        var scheduledDates: [Date] = []
-        let calendar = Calendar.current
-        var currentDate = startDate
-        
-        // Parse repeat_until_date
-        var endDate: Date? = nil
-        if reminder.repeatSettings.repeat_until_date != "Forever" && !reminder.repeatSettings.repeat_until_date.isEmpty {
-            let fmt = DateFormatter()
-            fmt.dateFormat = "yyyy-MM-dd"
-            endDate = fmt.date(from: reminder.repeatSettings.repeat_until_date)
-        }
-        
-        // Generate next batch of dates
-        for _ in 0..<maxScheduledNotifications {
-            // Check if we've reached the repeat_until_date
-            if let endDate = endDate, currentDate > endDate {
-                break
-            }
-            scheduledDates.append(currentDate)
-            currentDate = getNextOccurrence(from: currentDate, repeatType: reminder.repeatSettings.repeat_type, repeatIntervals: reminder.repeatSettings.repeatIntervals)
-        }
-        
-        // Schedule notifications
-        for (index, date) in scheduledDates.enumerated() {
-            let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-            let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)"
+            var scheduledDates: [Date] = []
+            let calendar = Calendar.current
+            var currentDate = startDate
             
-            // Add custom data to reschedule next batch
-            if index == maxScheduledNotifications - 1 {
-                content.userInfo = [
-                    "isLastInBatch": true,
-                    "reminderID": reminderID,
-                    "nextStartDate": currentDate.timeIntervalSince1970
-                ]
+            // Parse repeat_until_date
+            var endDate: Date? = nil
+            if reminder.repeatSettings.repeat_until_date != "Forever" && !reminder.repeatSettings.repeat_until_date.isEmpty {
+                let fmt = DateFormatter()
+                fmt.dateFormat = "yyyy-MM-dd"
+                endDate = fmt.date(from: reminder.repeatSettings.repeat_until_date)
             }
             
-            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request)
+            // Generate next batch of dates
+            for _ in 0..<self.maxScheduledNotifications {
+                // Check if we've reached the repeat_until_date
+                if let endDate = endDate, currentDate > endDate {
+                    break
+                }
+                scheduledDates.append(currentDate)
+                currentDate = self.getNextOccurrence(from: currentDate, repeatType: reminder.repeatSettings.repeat_type, repeatIntervals: reminder.repeatSettings.repeatIntervals)
+            }
+            
+            // Schedule notifications
+            for (index, date) in scheduledDates.enumerated() {
+                let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+                let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)"
+                
+                // Add custom data to reschedule next batch
+                if index == self.maxScheduledNotifications - 1 {
+                    content.userInfo = [
+                        "isLastInBatch": true,
+                        "reminderID": reminderID,
+                        "nextStartDate": currentDate.timeIntervalSince1970
+                    ]
+                }
+                
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                UNUserNotificationCenter.current().add(request)
+            }
         }
+        
+        
     }
     
     private func getNextOccurrence(from date: Date, repeatType: String, repeatIntervals: CustomRepeatType?) -> Date {
@@ -166,6 +168,7 @@ class NotificationManager: ObservableObject {
         let author = data["author"] as? String ?? "user"
         let isComplete = data["isComplete"] as? Bool ?? false
         let isLocked = data["isLocked"] as? Bool ?? false
+        let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
         
         guard let timestamp = data["date"] as? Timestamp else { return nil }
         let date = timestamp.dateValue()
@@ -199,7 +202,8 @@ class NotificationManager: ObservableObject {
             priority: priority,
             isComplete: isComplete,
             author: author,
-            isLocked: isLocked
+            isLocked: isLocked,
+            caretakerAlertDelay: caretakerAlertDelay
         )
     }
     

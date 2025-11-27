@@ -171,70 +171,72 @@ struct RegistrationScreen: View {
     let firestoreManager = FirestoreManager()
 
     var body: some View {
-        VStack(spacing: 20) {
-            TextField("Email", text: $email)
-                .autocapitalization(.none)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                .textContentType(.emailAddress)
-                .keyboardType(.emailAddress)
-
-            TextField("First Name", text: $firstName)
-                .autocapitalization(.words)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                .textContentType(.givenName)
-            
-            TextField("Last Name", text: $lastName)
-                .autocapitalization(.words)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                .textContentType(.familyName)
-            
-            TextField("Username", text: $username)
-                .autocapitalization(.none)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-
-            SecureField("Password", text: $password)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                .textContentType(.password)
-
-            SecureField("Confirm Password", text: $confirmPassword)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                .textContentType(.password)
-
-            Toggle("Caretaker", isOn: $isCaretaker)
-                .padding()
-
-            PrivacyConsentCheckbox(isChecked: $hasConsented)
-                .padding(.horizontal)
-            
-            Button(action: {
-                register()
-            }) {
-                Text("Register")
-                    .frame(maxWidth: .infinity)
+        ScrollView {
+            VStack(spacing: 20) {
+                TextField("Email", text: $email)
+                    .autocapitalization(.none)
                     .padding()
-                    .background(Color.green)
-                    .foregroundColor(.white)
+                    .background(Color(.systemGray6))
                     .cornerRadius(8)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+
+                TextField("First Name", text: $firstName)
+                    .autocapitalization(.words)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .textContentType(.givenName)
+                
+                TextField("Last Name", text: $lastName)
+                    .autocapitalization(.words)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .textContentType(.familyName)
+                
+                TextField("Username", text: $username)
+                    .autocapitalization(.none)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+
+                SecureField("Password", text: $password)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .textContentType(.password)
+
+                SecureField("Confirm Password", text: $confirmPassword)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .textContentType(.password)
+
+                Toggle("Caretaker", isOn: $isCaretaker)
+                    .padding()
+
+                PrivacyConsentCheckbox(isChecked: $hasConsented)
+                    .padding(.horizontal)
+                
+                Button(action: {
+                    register()
+                }) {
+                    Text("Register")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+                
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                }
             }
-            
-            if !errorMessage.isEmpty {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-            }
+            .padding()
         }
-        .padding()
         .navigationDestination(isPresented: $navigateToHome) {
             HomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
         }

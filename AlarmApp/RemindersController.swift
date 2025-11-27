@@ -48,8 +48,9 @@ struct ReminderData: Codable, Equatable {
     var isComplete: Bool    //true = complete
     var author: String      //"user" or "caregiver"
     var isLocked: Bool      //true = locked
+    var caretakerAlertDelay: TimeInterval
     
-    init(ID: Int, date: Date, title: String, description: String, repeatSettings: RepeatSettings, priority: String, isComplete: Bool, author: String, isLocked: Bool) {
+    init(ID: Int, date: Date, title: String, description: String, repeatSettings: RepeatSettings, priority: String, isComplete: Bool, author: String, isLocked: Bool, caretakerAlertDelay: TimeInterval) {
         self.ID = ID
         self.date = date
         self.title = title
@@ -59,6 +60,7 @@ struct ReminderData: Codable, Equatable {
         self.isComplete = isComplete
         self.author = author
         self.isLocked = isLocked
+        self.caretakerAlertDelay = caretakerAlertDelay
     }
 }
 
