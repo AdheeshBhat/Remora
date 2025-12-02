@@ -12,6 +12,7 @@ struct NavigationBarExperience: View {
     
     @Binding var cur_screen: Screen
     @ObservedObject var firestoreManager: FirestoreManager
+    @StateObject private var keyboard = KeyboardObserver()
     
     var body: some View {
         VStack {
@@ -77,23 +78,44 @@ struct NavigationBarExperience: View {
                 //BACK BUTTON
                 .navigationBarBackButtonHidden(true)
                 
-                VStack() {
-                    Button(action: {
-                        if cur_screen != .HomeScreen {
-                            dismiss()
+                // BACK or DONE BUTTON
+                VStack {
+                    if keyboard.isKeyboardVisible {
+                        // DONE BUTTON
+                        Button(action: {
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                            to: nil, from: nil, for: nil)
+                        }) {
+                            Image(systemName: "checkmark")
+                                .font(.title)
+                                .foregroundColor(.primary)
                         }
-                    }) {
-                        Image(systemName: "arrowshape.backward")
-                            .font(.title)
-                            .foregroundColor(cur_screen == .HomeScreen ? .gray : .primary)
+                        .padding(1.5)
+                        .background(RoundedRectangle(cornerRadius: 5)
+                            .stroke(Color.primary, lineWidth: 1))
+                        .padding(4)
+
+                        Text("Done")
+                    } else {
+                        // NORMAL BACK BUTTON
+                        Button(action: {
+                            if cur_screen != .HomeScreen {
+                                dismiss()
+                            }
+                        }) {
+                            Image(systemName: "arrowshape.backward")
+                                .font(.title)
+                                .foregroundColor(cur_screen == .HomeScreen ? .gray : .primary)
+                        }
+                        .padding(1.5)
+                        .background(RoundedRectangle(cornerRadius: 5)
+                            .stroke(cur_screen == .HomeScreen ? .gray : .primary, lineWidth: 1))
+                        .padding(4)
+                        .disabled(cur_screen == .HomeScreen)
+
+                        Text("Back")
                     }
-                    .padding(1.5)
-                    .background(RoundedRectangle(cornerRadius: 5).stroke(cur_screen == .HomeScreen ? .gray : .primary, lineWidth: 1))
-                    .padding(4)
-                    .disabled(cur_screen == .HomeScreen)
-                    Text("Back")
-                    
-                } //VStack ending
+                }
             } //HStack ending
             .padding(.bottom, 2)
         } //VStack ending
