@@ -75,9 +75,11 @@ struct HomeView: View {
 
             NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
         }
+        
         .onAppear {
             cur_screen = .HomeScreen
             
         }
     }
+        
 }

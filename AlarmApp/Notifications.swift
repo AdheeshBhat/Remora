@@ -24,7 +24,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
     print("setAlarm called for reminderID: \(reminderID), repeat_type: \(repeat_type), repeat_until_date: \(repeat_until_date), date: \(dateAndTime)")
 
     // Handle forever repeating alarms with NotificationManager
-    if repeat_until_date == "Forever" {
+    if repeat_until_date == "Forever" && repeat_type != "None" {
         let reminder = ReminderData(
             ID: 0,
             date: dateAndTime,
@@ -155,6 +155,38 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
                 print("Scheduled notification \(identifier) for \(triggerDate)")
             }
         }
+        //
+        // Schedule follow-up reminder for senior if task is not marked complete
+        //
+        let halfDelaySeconds = caretakerAlertDelay / 2
+        let followUpDate = triggerDate.addingTimeInterval(halfDelaySeconds)
+
+        // Use a different content object for follow-up
+        let followUpContent = UNMutableNotificationContent()
+        followUpContent.title = "Reminder: \(title)"
+        followUpContent.body = "Make sure to mark ‘\(title)’ as done! Your caretaker will be notified in \(Int((caretakerAlertDelay/2)/60)) minutes."
+        followUpContent.sound = content.sound
+        followUpContent.userInfo = [
+            "isFollowUp": true,
+            "reminderID": reminderID
+        ]
+        let timeInterval = followUpDate.timeIntervalSinceNow
+        if timeInterval > 0 {
+            let followUpTrigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
+            let followUpIdentifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-followup-\(index)"
+            
+            let followUpRequest = UNNotificationRequest(identifier: followUpIdentifier, content: followUpContent, trigger: followUpTrigger)
+            
+            UNUserNotificationCenter.current().add(followUpRequest) { error in
+                if let error = error {
+                    print("Error scheduling follow-up notification: \(error)")
+                } else {
+                    print("Scheduled follow-up notification \(followUpIdentifier) for \(followUpDate)")
+                }
+            }
+        } else {
+            print("Skipped scheduling follow-up notification for \(reminderID) because the interval is \(timeInterval) seconds (non-positive)")
+        }
     }
 }
 
@@ -211,12 +243,32 @@ func calculateNextDateForPattern(pattern: String, from baseDate: Date) -> Date? 
 func cancelAlarm(reminderID: String) {
     let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
     
-    // Cancel the base notification and all indexed variations
-    var identifiersToCancel = [baseIdentifier]
+    var identifiersToCancel: [String] = []
+    
+    // Cancel main notifications
+    identifiersToCancel.append(baseIdentifier)
     for i in 0..<100 {
         identifiersToCancel.append("\(baseIdentifier)-\(i)")
     }
     
+    // Cancel follow-up notifications
+    for i in 0..<100 {
+        identifiersToCancel.append("\(baseIdentifier)-followup-\(i)")
+    }
+    
     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
-    print("Cancelled notifications with base ID: \(baseIdentifier)")
+    print("Cancelled ALL notifications (main + follow-up) with base ID: \(baseIdentifier)")
 }
+
+//func cancelAlarm(reminderID: String) {
+//    let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
+//    
+//    // Cancel the base notification and all indexed variations
+//    var identifiersToCancel = [baseIdentifier]
+//    for i in 0..<100 {
+//        identifiersToCancel.append("\(baseIdentifier)-\(i)")
+//    }
+//    
+//    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
+//    print("Cancelled notifications with base ID: \(baseIdentifier)")
+//}

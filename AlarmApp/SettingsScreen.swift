@@ -8,14 +8,31 @@
 import SwiftUI
 import FirebaseAuth
 
+class AppearanceModel: ObservableObject {
+    @Published var useLightMode: Bool = true
+    
+    func loadFromFirebase(firestoreManager: FirestoreManager = FirestoreManager()) {
+        firestoreManager.loadUserSettings(field: "useLightMode") { value in
+            if let savedValue = value as? Bool {
+                DispatchQueue.main.async {
+                    self.useLightMode = savedValue
+                }
+            }
+        }
+    }
+}
+
 struct SettingsScreen: View {
     @Environment(\.presentationMode) private var presentationMode
+    @EnvironmentObject var appearance: AppearanceModel
     @Binding var cur_screen: Screen
     @State private var isDropdownVisible = false
     @State var selectedSound: String = ""
     @State private var showLogoutAlert = false
     @State private var isCaretaker = false
+    @State private var useLightMode: Bool = true
     @State private var username: String = ""
+    @State private var tempUseLightMode: Bool = true
     let firestoreManager: FirestoreManager
     
     var body: some View {
@@ -23,6 +40,26 @@ struct SettingsScreen: View {
             ScrollView {
                 VStack {
                     titleSection
+                    Text("General")
+                        .font(.title)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                        .padding(.bottom)
+                    Toggle("Color Theme (Light Mode):", isOn: $tempUseLightMode)
+                        .font(.headline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom)
                     accountHeading
                     if !isCaretaker {
                         usernameSection
@@ -40,6 +77,7 @@ struct SettingsScreen: View {
         .onAppear {
             cur_screen = .SettingsScreen
             loadSettings()
+            self.tempUseLightMode = appearance.useLightMode
             firestoreManager.checkIfCaretaker { result in
                 DispatchQueue.main.async {
                     self.isCaretaker = result
@@ -66,6 +104,13 @@ struct SettingsScreen: View {
                     selectedSound = sound
                 } else {
                     selectedSound = "Chord"
+                }
+            }
+        }
+        firestoreManager.loadUserSettings(field: "useLightMode") { value in
+            DispatchQueue.main.async {
+                if let useLight = value as? Bool {
+                    tempUseLightMode = useLight
                 }
             }
         }
@@ -232,8 +277,17 @@ extension SettingsScreen {
             firestoreManager.saveUserSettings(field: "selectedSound", value: selectedSound) { error in
                 DispatchQueue.main.async {
                     if error == nil {
-                        // Success - local state is already updated
-                        presentationMode.wrappedValue.dismiss()
+                        firestoreManager.saveUserSettings(field: "useLightMode", value: tempUseLightMode) { error2 in
+                            DispatchQueue.main.async {
+                                if error2 == nil {
+                                    // Success - local state is already updated
+                                    appearance.useLightMode = tempUseLightMode
+                                    presentationMode.wrappedValue.dismiss()
+                                } else {
+                                    print("Failed to save color mode: \(error2?.localizedDescription ?? "Unknown error")")
+                                }
+                            }
+                        }
                     } else {
                         print("Failed to save settings: \(error?.localizedDescription ?? "Unknown error")")
                     }

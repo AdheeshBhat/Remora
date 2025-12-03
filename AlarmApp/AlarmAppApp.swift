@@ -13,15 +13,25 @@ import UserNotifications
 @main
 struct AlarmAppApp: App {
     @Environment(\.scenePhase) private var scenePhase
+    @StateObject var appearance = AppearanceModel()
     
     init() {
         FirebaseApp.configure()
         setupNotificationDelegate()
+        
+//        let loader = FirestoreManager()
+//        appearance.loadFromFirebase(firestoreManager: loader)
     }
     
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(appearance)
+                .task {
+                    let loader = FirestoreManager()
+                    appearance.loadFromFirebase(firestoreManager: loader)
+                }
+                .preferredColorScheme(appearance.useLightMode ? .light : .dark)
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {

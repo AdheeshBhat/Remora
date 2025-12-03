@@ -11,7 +11,7 @@ import FirebaseFirestore
 
 class NotificationManager: ObservableObject {
     static let shared = NotificationManager()
-    private let maxScheduledNotifications = 50 // iOS limit is 64
+    private let maxScheduledNotifications = 30 // iOS limit is 64
     
     private init() {}
     
@@ -82,7 +82,7 @@ class NotificationManager: ObservableObject {
                 scheduledDates.append(currentDate)
                 currentDate = self.getNextOccurrence(from: currentDate, repeatType: reminder.repeatSettings.repeat_type, repeatIntervals: reminder.repeatSettings.repeatIntervals)
             }
-            
+            //print("Triggers to schedule for 'forever' reminder \(reminderID): \(scheduledDates)")
             // Schedule notifications
             for (index, date) in scheduledDates.enumerated() {
                 let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
@@ -99,7 +99,49 @@ class NotificationManager: ObservableObject {
                 }
                 
                 let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-                UNUserNotificationCenter.current().add(request)
+                UNUserNotificationCenter.current().add(request) { error in
+                    if let error = error {
+                        print("Error scheduling main notification: \(error)")
+                    } else {
+                        //print("Scheduled main notification for forever alarm: \(identifier) at \(date)")
+                    }
+                }
+                
+                // Schedule follow-up notification for forever alarms
+                let halfDelaySeconds = reminder.caretakerAlertDelay / 2
+                let followUpDate = date.addingTimeInterval(halfDelaySeconds)
+
+                // Build follow-up content
+                let followUpContent = UNMutableNotificationContent()
+                followUpContent.title = "Reminder: \(reminder.title)"
+                followUpContent.body = "Make sure to mark ‘\(reminder.title)’ as done! Your caretaker will be notified in \(Int((reminder.caretakerAlertDelay/2)/60)) minutes."
+                followUpContent.sound = content.sound
+                followUpContent.userInfo = [
+                    "isFollowUp": true,
+                    "reminderID": reminderID
+                ]
+
+                // Trigger
+                let timeInterval = followUpDate.timeIntervalSinceNow
+                if timeInterval > 0 {
+                    let followUpTrigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
+
+                    // Unique identifier (parallel to normal follow-up IDs)
+                    let followUpIdentifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-followup-\(index)"
+
+                    let followUpRequest = UNNotificationRequest(identifier: followUpIdentifier, content: followUpContent, trigger: followUpTrigger)
+
+                    UNUserNotificationCenter.current().add(followUpRequest) //{ error in
+    //                    if let error = error {
+    //                        print("Error scheduling follow-up notification: \(error)")
+    //                    } else {
+    //                        print("Scheduled follow-up notifications for forever alarm: \(followUpIdentifier) at \(followUpDate)")
+    //                    }
+    //                }
+                } else {
+                    print("Skipped follow-up notification for \(reminderID) because interval is \(timeInterval) seconds")
+                }
+                
             }
         }
         
@@ -264,6 +306,13 @@ class NotificationManager: ObservableObject {
             identifiersToCancel.append("\(baseIdentifier)-\(i)")
         }
         
+        // Cancel follow-up notifications
+        for i in 0..<maxScheduledNotifications {
+            identifiersToCancel.append("\(baseIdentifier)-followup-\(i)")
+        }
+        
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
+        print("Cancelled ALL 'forever' notifications (main + follow-up) with base ID: \(baseIdentifier)")
+
     }
 }
