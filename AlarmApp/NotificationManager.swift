@@ -39,6 +39,12 @@ class NotificationManager: ObservableObject {
         scheduleNextBatch(reminder: reminder, reminderID: reminderID, startDate: reminder.date)
     }
     
+    private func stripSeconds(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return calendar.date(from: comps)!
+    }
+    
     private func scheduleNextBatch(reminder: ReminderData, reminderID: String, startDate: Date) {
         let content = UNMutableNotificationContent()
         content.title = reminder.title
@@ -63,7 +69,7 @@ class NotificationManager: ObservableObject {
             content.sound = UNNotificationSound(named: UNNotificationSoundName(soundFileName))
             var scheduledDates: [Date] = []
             let calendar = Calendar.current
-            var currentDate = startDate
+            var currentDate = self.stripSeconds(startDate)
             
             // Parse repeat_until_date
             var endDate: Date? = nil
@@ -114,7 +120,7 @@ class NotificationManager: ObservableObject {
                 // Build follow-up content
                 let followUpContent = UNMutableNotificationContent()
                 followUpContent.title = "Reminder: \(reminder.title)"
-                followUpContent.body = "Make sure to mark ‘\(reminder.title)’ as done! Your caretaker will be notified in \(Int((reminder.caretakerAlertDelay/2)/60)) minutes."
+                followUpContent.body = "Make sure to mark ‘\(reminder.title)’ as done! Caretaker alert in \(Int((reminder.caretakerAlertDelay/2)/60)) min."
                 followUpContent.sound = content.sound
                 followUpContent.userInfo = [
                     "isFollowUp": true,
@@ -298,7 +304,7 @@ class NotificationManager: ObservableObject {
         }
     }
     
-    private func cancelForeverAlarm(reminderID: String) {
+    func cancelForeverAlarm(reminderID: String) {
         let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
         
         var identifiersToCancel: [String] = []

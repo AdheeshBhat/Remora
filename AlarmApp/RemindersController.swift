@@ -49,8 +49,10 @@ struct ReminderData: Codable, Equatable {
     var author: String      //"user" or "caregiver"
     var isLocked: Bool      //true = locked
     var caretakerAlertDelay: TimeInterval
+    var deletedInstances: [Date] = []
+
     
-    init(ID: Int, date: Date, title: String, description: String, repeatSettings: RepeatSettings, priority: String, isComplete: Bool, author: String, isLocked: Bool, caretakerAlertDelay: TimeInterval) {
+    init(ID: Int, date: Date, title: String, description: String, repeatSettings: RepeatSettings, priority: String, isComplete: Bool, author: String, isLocked: Bool, caretakerAlertDelay: TimeInterval, deletedStrings: [String] = []) {
         self.ID = ID
         self.date = date
         self.title = title
@@ -61,6 +63,9 @@ struct ReminderData: Codable, Equatable {
         self.author = author
         self.isLocked = isLocked
         self.caretakerAlertDelay = caretakerAlertDelay
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d HH:mm:ss" // matches your Firebase format
+        self.deletedInstances = deletedStrings.compactMap { formatter.date(from: $0) }
     }
 }
 

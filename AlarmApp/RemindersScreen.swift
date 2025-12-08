@@ -1,7 +1,11 @@
 import SwiftUI
 import FirebaseFirestore
 
+
+
 struct RemindersScreen: View {
+    //@AppStorage("reminders_showCalendarView") private var storedShowCalendarView: Bool = false
+    //@AppStorage("reminders_hasLaunchedBefore") private var hasLaunchedBefore: Bool = false
     //@Environment(\.dismiss) var dismiss also works for back button
     @Environment(\.presentationMode) private var
         presentationMode: Binding<PresentationMode>
@@ -60,6 +64,16 @@ struct RemindersScreen: View {
             cur_screen = .RemindersScreen
             canResetDate = displayedPeriodDiffersFromToday()
             loadReminders()
+            
+//            if !hasLaunchedBefore {
+//                    // First launch → show list view
+//                    showCalendarView = false
+//                    storedShowCalendarView = false
+//                    hasLaunchedBefore = true
+//            } else {
+//                // Not first launch → restore saved setting
+//                showCalendarView = storedShowCalendarView
+//            }
         }
         .refreshable {
             loadReminders()
@@ -247,6 +261,8 @@ struct RemindersScreen: View {
             }
             .toggleStyle(SwitchToggleStyle(tint: .green))
             .onChange(of: showCalendarView) { _, newValue in
+                //storedShowCalendarView = newValue
+                
                 if newValue {
                     calendarViewType = filterPeriod == "today" ? "week" : filterPeriod
                 }
@@ -379,6 +395,8 @@ struct ReminderRow: View {
     @State private var showConfirmation = false
     //Used to show "delete" alert
     @State private var showDeleteConfirmation = false
+    // Used for two-stage delete alert (instance or all)
+    @State private var showDeleteInstanceChoice = false
     var userID: Int
     var dateKey: Date
     var documentID: String
@@ -532,13 +550,52 @@ struct ReminderRow: View {
                         .fixedSize()
                         .alert("Are you sure you want to delete this reminder?", isPresented: $showDeleteConfirmation) {
                             Button("Yes", role: .destructive) {
-                                //deleteFromDatabase(database: &database, userID: userID, date: dateKey)
-                                firestoreManager.deleteReminder(
-                                    dateCreated: documentID
-                                )
-                                onUpdate?()
+                                // Only show delete-instance choice if reminder repeats
+                                let repeatSettings = curReminderData["repeatSettings"] as? [String: Any]
+                                let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
+                                if repeatType != "None" {
+                                    showDeleteInstanceChoice = true
+                                } else {
+                                    // For non-repeating reminders, delete immediately
+                                    cancelAlarm(reminderID: documentID)
+                                    firestoreManager.deleteReminder(dateCreated: documentID)
+                                    onUpdate?()
+                                }
                             }
                             Button("Nevermind", role: .cancel) {}
+                        }
+
+                        // Second alert: only shown for repeating reminders
+                        .alert("Delete Reminder", isPresented: $showDeleteInstanceChoice) {
+                            Button("Delete This Instance") {
+                                let formatter = DateFormatter()
+                                formatter.dateFormat = "EEEE, MMM d HH:mm:ss"
+                                let deletedString = formatter.string(from: dateKey)
+                                firestoreManager.updateReminderFields(
+                                    dateCreated: documentID,
+                                    fields: ["deletedInstances": FieldValue.arrayUnion([deletedString])]
+                                )
+                                let baseID = createUniqueIDFromDate(date: createExactDateFromString(dateString: documentID))
+                                for i in 0..<100 {
+                                    UNUserNotificationCenter.current().removePendingNotificationRequests(
+                                        withIdentifiers: ["\(baseID)-\(i)", "\(baseID)-followup-\(i)"]
+                                    )
+                                }
+                                onUpdate?()
+                            }
+                            Button("Delete All Occurrences", role: .destructive) {
+                                let repeatSettings = curReminderData["repeatSettings"] as? [String: Any]
+                                let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
+                                let repeatUntil = repeatSettings?["repeat_until_date"] as? String ?? "None"
+                                if repeatType != "None" && repeatUntil != "Forever" {
+                                    cancelAlarm(reminderID: documentID)
+                                } else {
+                                    NotificationManager.shared.cancelForeverAlarm(reminderID: documentID)
+                                }
+                                firestoreManager.deleteReminder(dateCreated: documentID)
+                                onUpdate?()
+                            }
+                            Button("Cancel", role: .cancel) {}
                         }
                     } // else if ending
                 } // HStack ending

@@ -69,7 +69,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
     var triggers: [Date] = []
     
     let calendar = Calendar.current
-    let startDate = dateAndTime
+    let startDate = stripSeconds(from: dateAndTime)
     
     // Parse repeat_until_date
     var endDate: Date? = nil
@@ -96,6 +96,13 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
             }
             count += 1
         }
+    }
+    
+    //Helper to make sure time for notification is exactly :00 seconds
+    func stripSeconds(from date: Date) -> Date {
+        let calendar = Calendar.current
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return calendar.date(from: comps)!
     }
 
     switch repeat_type {
@@ -164,7 +171,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         // Use a different content object for follow-up
         let followUpContent = UNMutableNotificationContent()
         followUpContent.title = "Reminder: \(title)"
-        followUpContent.body = "Make sure to mark ‘\(title)’ as done! Your caretaker will be notified in \(Int((caretakerAlertDelay/2)/60)) minutes."
+        followUpContent.body = "Make sure to mark ‘\(title)’ as done! Caretaker alert in \(Int((caretakerAlertDelay/2)/60)) min."
         followUpContent.sound = content.sound
         followUpContent.userInfo = [
             "isFollowUp": true,

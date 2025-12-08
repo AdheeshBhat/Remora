@@ -184,7 +184,7 @@ struct CalendarView: View {
     let helper = CalendarHelper()
     @State private var calendarViewType: String = "month"
     @State private var isCalendarViewOn: Bool = true
-    @State private var isReminderViewOn: Bool = false
+    @State private var isReminderViewOn: Bool = true
     @State private var isEditingMonthYear = false
     @State private var monthFilteredDay: Date? = nil
     @State private var weekFilteredDay: Date? = Date()

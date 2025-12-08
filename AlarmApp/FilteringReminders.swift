@@ -13,14 +13,15 @@ func filterRemindersForToday(userData: [Date: ReminderData], filteredDay: Date?)
     let calendar = Calendar.current
     let today = Date()
     var startOfDay = calendar.startOfDay(for: today)
-    if filteredDay != nil {
-        startOfDay = calendar.startOfDay(for: filteredDay!)
+    if let filteredDay = filteredDay {
+        startOfDay = calendar.startOfDay(for: filteredDay)
     }
     let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: startOfDay)!
     
     return userData.filter { (_, reminder) in
         let reminderDate = reminder.date
-        return reminderDate >= startOfDay && reminderDate <= endOfDay
+        let isDeleted = reminder.deletedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate) }
+        return reminderDate >= startOfDay && reminderDate <= endOfDay && !isDeleted
     }
 }
 
@@ -29,8 +30,8 @@ func filterRemindersForWeek(userData: [Date: ReminderData], filteredDay: Date?) 
     let today = Date()
     //(start of the week always begins on Sunday in this case) RAISES SAME QUESTION AS FOR MONTH FILTER
     var startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
-    if filteredDay != nil {
-        startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: filteredDay!))!
+    if let filteredDay = filteredDay {
+        startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: filteredDay))!
     }
     var endOfWeek = calendar.date(byAdding: .day, value: 6, to: startOfWeek)!
     endOfWeek = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endOfWeek)!
@@ -39,10 +40,8 @@ func filterRemindersForWeek(userData: [Date: ReminderData], filteredDay: Date?) 
     
     return userData.filter { (_, reminder) in
         let reminderDate = reminder.date
-        print("Checking reminder date: \(reminderDate) against week range")
-        let isInRange = reminderDate >= startOfWeek && reminderDate <= endOfWeek
-        print("Reminder in range: \(isInRange)")
-        return isInRange
+        let isDeleted = reminder.deletedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate) }
+        return reminderDate >= startOfWeek && reminderDate <= endOfWeek && !isDeleted
     }
 }
 
@@ -53,8 +52,8 @@ func filterRemindersForMonth(userData: [Date: ReminderData], filteredDay: Date?)
     let calendar = Calendar.current
     let today = Date()
     var startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
-    if filteredDay != nil {
-        startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: filteredDay!))!
+    if let filteredDay = filteredDay {
+        startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: filteredDay))!
     }
 
     let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
@@ -63,10 +62,8 @@ func filterRemindersForMonth(userData: [Date: ReminderData], filteredDay: Date?)
     
     return userData.filter { (_, reminder) in
         let reminderDate = reminder.date
-        print("Checking reminder date: \(reminderDate) against month range")
-        let isInRange = reminderDate >= startOfMonth && reminderDate <= endOfMonth
-        print("Reminder in range: \(isInRange)")
-        return isInRange
+        let isDeleted = reminder.deletedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate) }
+        return reminderDate >= startOfMonth && reminderDate <= endOfMonth && !isDeleted
     }
 }
 
@@ -232,7 +229,8 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
         
         if repeatType == "None" {
             // Non-repeating reminder
-            if reminder.date >= startDate && reminder.date <= endDate {
+            if reminder.date >= startDate && reminder.date <= endDate &&
+               !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }) {
                 expandedData[documentID] = reminder
             }
         } else if repeatType == "Custom" {
@@ -242,8 +240,8 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 var seenDates = Set<String>()
                 
                 // Include original reminder if it's in range
-                if reminder.date >= startDate && reminder.date <= endDate {
-                    expandedData[documentID] = reminder
+                if reminder.date >= startDate && reminder.date <= endDate &&
+                   !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }) {                    expandedData[documentID] = reminder
                 }
                 
                 // Generate occurrences for each month in range, starting from next month after original
@@ -259,9 +257,10 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                         if let occurrenceDate = calculatePatternDateForMonth(pattern: pattern, month: monthStart) {
                             let finalDate = calendar.date(bySettingHour: calendar.component(.hour, from: reminder.date), minute: calendar.component(.minute, from: reminder.date), second: 0, of: occurrenceDate)!
                             let dateKey = createUniqueIDFromDate(date: finalDate)
-                            
-                            if finalDate >= startDate && finalDate <= endDate && !seenDates.contains(dateKey) {
-                                seenDates.insert(dateKey)
+
+                            if finalDate >= startDate && finalDate <= endDate &&
+                               !seenDates.contains(dateKey) &&
+                               !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate) }) {                                seenDates.insert(dateKey)
                                 var instanceReminder = reminder
                                 instanceReminder.date = finalDate
                                 expandedData["\(documentID)-\(dateKey)"] = instanceReminder
@@ -281,8 +280,8 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
             var instanceCount = 0
             
             // Include original reminder if it's in range
-            if reminder.date >= startDate && reminder.date <= endDate {
-                expandedData["\(documentID)-\(instanceCount)"] = reminder
+            if reminder.date >= startDate && reminder.date <= endDate &&
+               !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }) {                expandedData["\(documentID)-\(instanceCount)"] = reminder
                 instanceCount += 1
             }
             
@@ -312,14 +311,15 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 if reminder.repeatSettings.repeat_until_date != "Forever" && !reminder.repeatSettings.repeat_until_date.isEmpty {
                     let fmt = DateFormatter()
                     fmt.dateFormat = "yyyy-MM-dd"
-                    if let endDate = fmt.date(from: reminder.repeatSettings.repeat_until_date),
-                       calendar.startOfDay(for: currentDate) > calendar.startOfDay(for: endDate) {
+                    if let endDateLimit = fmt.date(from: reminder.repeatSettings.repeat_until_date),
+                       calendar.startOfDay(for: currentDate) > calendar.startOfDay(for: endDateLimit) {
                         break
                     }
                 }
                 
                 if currentDate > endDate { break }
-                if currentDate >= startDate {
+                if currentDate >= startDate &&
+                   !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: currentDate) }) {
                     var instanceReminder = reminder
                     instanceReminder.date = currentDate
                     expandedData["\(documentID)-\(instanceCount)"] = instanceReminder
