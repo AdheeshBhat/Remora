@@ -9,10 +9,12 @@ import SwiftUI
 
 struct NavigationBarExperience: View {
     @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var appearance: AppearanceModel
     
     @Binding var cur_screen: Screen
     @ObservedObject var firestoreManager: FirestoreManager
     @StateObject private var keyboard = KeyboardObserver()
+    @State private var initialCalendarViewType: String = "month"
     
     var body: some View {
         VStack {
@@ -28,17 +30,34 @@ struct NavigationBarExperience: View {
                 //REMINDERS BUTTON
                 VStack() {
                     if cur_screen != .RemindersScreen {
-                        NavigationLink(
-                            destination:RemindersScreen(
-                                cur_screen: $cur_screen,
-                                filterPeriod: "week",
-                                remindersForUser: [:],
-                                firestoreManager: firestoreManager
-                            )) {
-                            Image(systemName: "list.bullet")
-                                .font(.title)
-                                .padding(7)
-                                .foregroundColor((cur_screen == .RemindersScreen) ? Color.blue : Color.primary)
+                        if appearance.defaultToCalendarView {
+                            NavigationLink(
+                                destination: CalendarView(
+                                    cur_screen: $cur_screen,
+                                    initialViewType: $initialCalendarViewType,
+                                    firestoreManager: firestoreManager
+                                )
+                                .environmentObject(appearance)
+                            ) {
+                                Image(systemName: "list.bullet")
+                                    .font(.title)
+                                    .padding(7)
+                                    .foregroundColor((cur_screen == .RemindersScreen) ? Color.blue : Color.primary)
+                            }
+                        } else {
+                            NavigationLink(
+                                destination: RemindersScreen(
+                                    cur_screen: $cur_screen,
+                                    filterPeriod: "week",
+                                    remindersForUser: [:],
+                                    firestoreManager: firestoreManager
+                                )
+                            ) {
+                                Image(systemName: "list.bullet")
+                                    .font(.title)
+                                    .padding(7)
+                                    .foregroundColor((cur_screen == .RemindersScreen) ? Color.blue : Color.primary)
+                            }
                         }
                     } else {
                         Image(systemName: "list.bullet")
@@ -121,5 +140,3 @@ struct NavigationBarExperience: View {
         } //VStack ending
     } //body ending
 }
-
-

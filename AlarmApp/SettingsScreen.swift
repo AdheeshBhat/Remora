@@ -10,12 +10,20 @@ import FirebaseAuth
 
 class AppearanceModel: ObservableObject {
     @Published var useLightMode: Bool = true
+    @Published var defaultToCalendarView: Bool = false
     
     func loadFromFirebase(firestoreManager: FirestoreManager = FirestoreManager()) {
         firestoreManager.loadUserSettings(field: "useLightMode") { value in
             if let savedValue = value as? Bool {
                 DispatchQueue.main.async {
                     self.useLightMode = savedValue
+                }
+            }
+        }
+        firestoreManager.loadUserSettings(field: "defaultToCalendarView") { value in
+            if let savedValue = value as? Bool {
+                DispatchQueue.main.async {
+                    self.defaultToCalendarView = savedValue
                 }
             }
         }
@@ -33,6 +41,7 @@ struct SettingsScreen: View {
     @State private var useLightMode: Bool = true
     @State private var username: String = ""
     @State private var tempUseLightMode: Bool = true
+    @State private var tempDefaultToCalendarView: Bool = false
     let firestoreManager: FirestoreManager
     
     var body: some View {
@@ -47,6 +56,20 @@ struct SettingsScreen: View {
                         .padding(.horizontal)
                         .padding(.bottom)
                     Toggle("Color Theme (Light Mode):", isOn: $tempUseLightMode)
+                        .font(.headline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom)
+                    Toggle("Default to Calendar View:", isOn: $tempDefaultToCalendarView)
                         .font(.headline)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -78,6 +101,7 @@ struct SettingsScreen: View {
             cur_screen = .SettingsScreen
             loadSettings()
             self.tempUseLightMode = appearance.useLightMode
+            self.tempDefaultToCalendarView = appearance.defaultToCalendarView
             firestoreManager.checkIfCaretaker { result in
                 DispatchQueue.main.async {
                     self.isCaretaker = result
@@ -111,6 +135,13 @@ struct SettingsScreen: View {
             DispatchQueue.main.async {
                 if let useLight = value as? Bool {
                     tempUseLightMode = useLight
+                }
+            }
+        }
+        firestoreManager.loadUserSettings(field: "defaultToCalendarView") { value in
+            DispatchQueue.main.async {
+                if let pref = value as? Bool {
+                    tempDefaultToCalendarView = pref
                 }
             }
         }
@@ -282,6 +313,15 @@ extension SettingsScreen {
                                 if error2 == nil {
                                     // Success - local state is already updated
                                     appearance.useLightMode = tempUseLightMode
+                                    firestoreManager.saveUserSettings(field: "defaultToCalendarView", value: tempDefaultToCalendarView) { err in
+                                        DispatchQueue.main.async {
+                                            if err == nil {
+                                                appearance.defaultToCalendarView = tempDefaultToCalendarView
+                                            } else {
+                                                print("Failed to save calendar preference: \(err?.localizedDescription ?? "Unknown error")")
+                                            }
+                                        }
+                                    }
                                     presentationMode.wrappedValue.dismiss()
                                 } else {
                                     print("Failed to save color mode: \(error2?.localizedDescription ?? "Unknown error")")

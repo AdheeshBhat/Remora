@@ -568,12 +568,9 @@ struct ReminderRow: View {
                         // Second alert: only shown for repeating reminders
                         .alert("Delete Reminder", isPresented: $showDeleteInstanceChoice) {
                             Button("Delete This Instance") {
-                                let formatter = DateFormatter()
-                                formatter.dateFormat = "EEEE, MMM d HH:mm:ss"
-                                let deletedString = formatter.string(from: dateKey)
                                 firestoreManager.updateReminderFields(
                                     dateCreated: documentID,
-                                    fields: ["deletedInstances": FieldValue.arrayUnion([deletedString])]
+                                    fields: ["deletedInstances": FieldValue.arrayUnion([dateKey])]
                                 )
                                 let baseID = createUniqueIDFromDate(date: createExactDateFromString(dateString: documentID))
                                 for i in 0..<100 {

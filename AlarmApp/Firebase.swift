@@ -114,6 +114,12 @@ class FirestoreManager: ObservableObject {
                     let isComplete = data["isComplete"] as? Bool ?? false
                     let isLocked = data["isLocked"] as? Bool ?? false
                     let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
+                    let deletedInstances: [Date] = {
+                        if let timestamps = data["deletedInstances"] as? [Timestamp] {
+                            return timestamps.map {$0.dateValue()}
+                        }
+                        return []
+                    }()
 
                     let dateFromField: Date? = {
                         if let ts = data["date"] as? Timestamp {
@@ -158,7 +164,8 @@ class FirestoreManager: ObservableObject {
                         isComplete: isComplete,
                         author: author,
                         isLocked: isLocked,
-                        caretakerAlertDelay: caretakerAlertDelay
+                        caretakerAlertDelay: caretakerAlertDelay,
+                        deletedInstances: deletedInstances
                     )
 
                     // Use document ID as key instead of date

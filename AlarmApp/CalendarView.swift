@@ -197,6 +197,8 @@ struct CalendarView: View {
     @State private var canResetDate: Bool = false
     @State private var isUsingPicker: Bool = false
     @State private var seniorUID: String? = nil
+    @State private var goToReminders = false
+    @State private var listFilter: String = "week"
     
     var preloadedReminders: [String: ReminderData]? = nil
     let firestoreManager: FirestoreManager
@@ -267,6 +269,16 @@ struct CalendarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            NavigationLink(
+                destination: RemindersScreen(
+                    cur_screen: $cur_screen,
+                    filterPeriod: listFilter,
+                    remindersForUser: [:],
+                    firestoreManager: firestoreManager
+                ),
+                isActive: $goToReminders
+            ) { EmptyView() }
+            .hidden()
             // MARK: Header
             ZStack {
                 HStack {
@@ -469,7 +481,8 @@ struct CalendarView: View {
                 }
                 .onChange(of: isCalendarViewOn) { _, newValue in
                     if !newValue {
-                        presentationMode.wrappedValue.dismiss()
+                        listFilter = (calendarViewType == "week") ? "week" : "month"
+                        goToReminders = true
                     }
                 }
             }
@@ -487,6 +500,7 @@ struct CalendarView: View {
         }
         .onAppear {
             calendarViewType = initialViewType
+            isCalendarViewOn = true
             
             if let preloadedReminders = preloadedReminders {
                 viewModel.loadReminders(from: preloadedReminders)
