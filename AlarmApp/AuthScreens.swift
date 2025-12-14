@@ -17,6 +17,8 @@ struct LoginScreen: View {
     @State private var showRegistration: Bool = false
     @State private var navigateToCaretakerHome: Bool = false
     let firestoreManager = FirestoreManager()
+    @EnvironmentObject var appearance: AppearanceModel
+    
 
     var body: some View {
         NavigationStack {
@@ -121,12 +123,17 @@ struct LoginScreen: View {
             .background(Color(.systemBackground))
             .navigationDestination(isPresented: $navigateToHome) {
                 HomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                    .environmentObject(appearance)
             }
             .navigationDestination(isPresented: $navigateToCaretakerHome) {
                 CaretakerHomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                    .environmentObject(appearance)
+
             }
             .navigationDestination(isPresented: $showRegistration) {
                 RegistrationScreen(cur_screen: $cur_screen)
+                    .environmentObject(appearance)
+
             }
         }
     }

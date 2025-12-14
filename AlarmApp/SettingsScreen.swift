@@ -359,7 +359,7 @@ extension SettingsScreen {
             try Auth.auth().signOut()
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let window = windowScene.windows.first {
-                window.rootViewController = UIHostingController(rootView: ContentView())
+                window.rootViewController = UIHostingController(rootView: ContentView().environmentObject(appearance))
             }
         } catch {
             print("Error signing out: \(error.localizedDescription)")
