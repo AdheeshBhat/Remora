@@ -267,15 +267,17 @@ func cancelAlarm(reminderID: String) {
     print("Cancelled ALL notifications (main + follow-up) with base ID: \(baseIdentifier)")
 }
 
-//func cancelAlarm(reminderID: String) {
-//    let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
-//    
-//    // Cancel the base notification and all indexed variations
-//    var identifiersToCancel = [baseIdentifier]
-//    for i in 0..<100 {
-//        identifiersToCancel.append("\(baseIdentifier)-\(i)")
-//    }
-//    
-//    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
-//    print("Cancelled notifications with base ID: \(baseIdentifier)")
-//}
+func cancelSingleAlarmInstance(reminderID: String, instanceIndex: Int) {
+    let baseIdentifier = createUniqueIDFromDate(
+        date: createExactDateFromString(dateString: reminderID)
+    )
+
+    let mainIdentifier = "\(baseIdentifier)-\(instanceIndex)"
+    let followUpIdentifier = "\(baseIdentifier)-followup-\(instanceIndex)"
+
+    UNUserNotificationCenter.current().removePendingNotificationRequests(
+        withIdentifiers: [mainIdentifier, followUpIdentifier]
+    )
+
+    print("Cancelled single alarm instance: \(mainIdentifier) and follow-up")
+}

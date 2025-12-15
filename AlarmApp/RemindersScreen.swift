@@ -424,24 +424,68 @@ struct ReminderRow: View {
                 HStack(spacing: 12) {
                     //DONE BUTTON
                     Button(action: {
+                        let repeatSettings = curReminderData["repeatSettings"] as? [String: Any]
+                        let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
                         let isComplete = curReminderData["isComplete"] as? Bool ?? false
-                        if isComplete {
-                            showConfirmation = true
-                        } else {
+
+                        if repeatType == "None" {
+                            if isComplete {
+                                showConfirmation = true
+                                return
+                            }
+                            // Non-repeating reminder → mark complete globally
                             firestoreManager.updateReminderFields(
                                 dateCreated: documentID,
                                 fields: ["isComplete": true]
                             )
-                            // Update UI immediately
                             self.curReminderData["isComplete"] = true
-                            //cancel the notification when "Done" is clicked
                             cancelAlarm(reminderID: documentID)
+                        } else {
+                            // Repeating reminder → complete only this instance
+                            // Add dateKey to completedInstances instead of deletedInstances
+                            firestoreManager.updateReminderFields(
+                                dateCreated: documentID,
+                                fields: ["completedInstances": FieldValue.arrayUnion([dateKey])]
+                            )
+
+                            // Optimistically update local UI so checkmark appears immediately
+                            var completed = curReminderData["completedInstances"] as? [Timestamp] ?? []
+                            completed.append(Timestamp(date: dateKey))
+                            curReminderData["completedInstances"] = completed
+
+                            let reminderStartDate = createExactDateFromString(dateString: documentID)
+                            let calendar = Calendar.current
+                            let instanceIndex = calendar.dateComponents(
+                                [.day],
+                                from: reminderStartDate,
+                                to: dateKey
+                            ).day ?? 0
+
+                            cancelSingleAlarmInstance(
+                                reminderID: documentID,
+                                instanceIndex: instanceIndex
+                            )
+
+                            // Do NOT call loadReminders() here — local state update drives UI change
+                            onUpdate?()
                         }
                     }) {
+                        // Green checkmark logic for repeating reminders
+                        let repeatSettings = curReminderData["repeatSettings"] as? [String: Any]
+                        let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
+                        let completedInstances = curReminderData["completedInstances"] as? [Timestamp] ?? []
+                        let isInstanceComplete = completedInstances.contains { ts in
+                            Calendar.current.isDate(ts.dateValue(), inSameDayAs: dateKey)
+                        }
+                        let isComplete = curReminderData["isComplete"] as? Bool ?? false
                         HStack(spacing: 6) {
-                            Image(systemName: (curReminderData["isComplete"] as? Bool ?? false) ? "checkmark.circle.fill" : "circle")
+                            Image(systemName: (repeatType == "None"
+                                               ? (isComplete ? "checkmark.circle.fill" : "circle")
+                                               : (isInstanceComplete ? "checkmark.circle.fill" : "circle")))
                                 .font(.title2)
-                                .foregroundColor((curReminderData["isComplete"] as? Bool ?? false) ? .green : .gray)
+                                .foregroundColor((repeatType == "None"
+                                                  ? (isComplete ? .green : .gray)
+                                                  : (isInstanceComplete ? .green : .gray)))
                             Text("Done")
                                 .font(.title3)
                                 .bold()
@@ -572,12 +616,16 @@ struct ReminderRow: View {
                                     dateCreated: documentID,
                                     fields: ["deletedInstances": FieldValue.arrayUnion([dateKey])]
                                 )
-                                let baseID = createUniqueIDFromDate(date: createExactDateFromString(dateString: documentID))
-                                for i in 0..<100 {
-                                    UNUserNotificationCenter.current().removePendingNotificationRequests(
-                                        withIdentifiers: ["\(baseID)-\(i)", "\(baseID)-followup-\(i)"]
-                                    )
-                                }
+
+                                let reminderStartDate = createExactDateFromString(dateString: documentID)
+                                let calendar = Calendar.current
+                                let instanceIndex = calendar.dateComponents([.day], from: reminderStartDate, to: dateKey).day ?? 0
+
+                                cancelSingleAlarmInstance(
+                                    reminderID: documentID,
+                                    instanceIndex: instanceIndex
+                                )
+
                                 onUpdate?()
                             }
                             Button("Delete All Occurrences", role: .destructive) {

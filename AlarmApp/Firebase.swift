@@ -30,7 +30,7 @@ class FirestoreManager: ObservableObject {
     var currentUID: String?
     @Published var isCaretakerViewingSenior: Bool = false
         
-        //MARK: Reminder-relates functions
+        //MARK: Reminder-related functions
             //set, get, get for user, update, delete, get forever
     
     // Create a reminder
