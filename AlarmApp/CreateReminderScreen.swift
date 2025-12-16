@@ -232,7 +232,7 @@ struct CreateReminderScreen: View {
                                 isLocked: isLocked,
                                 caretakerAlertDelay: caretakerAlertDelay
                             )
-                            //let uniqueID = Date.now
+                            //let uniqueID = Date.now 
                             let reminderID = getExactStringFromCurrentDate()
                             firestoreManager.setReminder(reminderID: reminderID, reminder: reminder)
                             presentationMode.wrappedValue.dismiss()
