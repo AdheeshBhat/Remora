@@ -427,6 +427,10 @@ struct ReminderRow: View {
                         let repeatSettings = curReminderData["repeatSettings"] as? [String: Any]
                         let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
                         let isComplete = curReminderData["isComplete"] as? Bool ?? false
+                        let allCompletedInstances = curReminderData["completedInstances"] as? [Timestamp] ?? []
+                        let isInstanceComplete = allCompletedInstances.contains {
+                            instanceTime in Calendar.current.isDate(instanceTime.dateValue(), inSameDayAs: dateKey)
+                        }
 
                         if repeatType == "None" {
                             if isComplete {
@@ -441,33 +445,40 @@ struct ReminderRow: View {
                             self.curReminderData["isComplete"] = true
                             cancelAlarm(reminderID: documentID)
                         } else {
-                            // Repeating reminder → complete only this instance
-                            // Add dateKey to completedInstances instead of deletedInstances
-                            firestoreManager.updateReminderFields(
-                                dateCreated: documentID,
-                                fields: ["completedInstances": FieldValue.arrayUnion([dateKey])]
-                            )
+                            if isInstanceComplete {
+                                showConfirmation = true
+                                return
+                            } else {
+                                // Repeating reminder → complete only this instance
+                                // Add dateKey to completedInstances instead of deletedInstances
+                                firestoreManager.updateReminderFields(
+                                    dateCreated: documentID,
+                                    fields: ["completedInstances": FieldValue.arrayUnion([dateKey])]
+                                )
 
-                            // Optimistically update local UI so checkmark appears immediately
-                            var completed = curReminderData["completedInstances"] as? [Timestamp] ?? []
-                            completed.append(Timestamp(date: dateKey))
-                            curReminderData["completedInstances"] = completed
+                                // Optimistically update local UI so checkmark appears immediately
+                                var completed = curReminderData["completedInstances"] as? [Timestamp] ?? []
+                                completed.append(Timestamp(date: dateKey))
+                                curReminderData["completedInstances"] = completed
 
-                            let reminderStartDate = createExactDateFromString(dateString: documentID)
-                            let calendar = Calendar.current
-                            let instanceIndex = calendar.dateComponents(
-                                [.day],
-                                from: reminderStartDate,
-                                to: dateKey
-                            ).day ?? 0
+                                let reminderStartDate = createExactDateFromString(dateString: documentID)
+                                let calendar = Calendar.current
+                                let instanceIndex = calendar.dateComponents(
+                                    [.day],
+                                    from: reminderStartDate,
+                                    to: dateKey
+                                ).day ?? 0
 
-                            cancelSingleAlarmInstance(
-                                reminderID: documentID,
-                                instanceIndex: instanceIndex
-                            )
+                                cancelSingleAlarmInstance(
+                                    reminderID: documentID,
+                                    instanceIndex: instanceIndex
+                                )
 
-                            // Do NOT call loadReminders() here — local state update drives UI change
-                            onUpdate?()
+                                // Do NOT call loadReminders() here — local state update drives UI change
+                                onUpdate?()
+                            }
+                            
+                            
                         }
                     }) {
                         // Green checkmark logic for repeating reminders
@@ -497,50 +508,34 @@ struct ReminderRow: View {
                     }
                     .alert("Are you sure you want to mark this reminder as incomplete?", isPresented: $showConfirmation) {
                         Button("Yes", role: .destructive) {
-                            firestoreManager.updateReminderFields(
-                                dateCreated: documentID,
-                                fields: ["isComplete": false]
-                            )
-                            // Update UI immediately
-                            self.curReminderData["isComplete"] = false
-                            // Update (reset) the notification when marked as incomplete
-                            firestoreManager.getReminder(dateCreated: documentID) { document in
-                                guard let data = document?.data() else { return }
-
-                                if let timestamp = data["date"] as? Timestamp {
-                                    let date = timestamp.dateValue()
-                                    let title = data["title"] as? String ?? ""
-                                    let description = data["description"] as? String ?? ""
-
-                                    let repeatSettings = data["repeatSettings"] as? [String: Any]
-                                    let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
-                                    let repeatUntil = repeatSettings?["repeat_until_date"] as? String ?? "Forever"
-                                    let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
-
-                                    var customRepeat: CustomRepeatType? = nil
-                                    if let repeatIntervals = repeatSettings?["repeatIntervals"] as? [String: Any],
-                                       let days = repeatIntervals["days"] as? String {
-                                        customRepeat = CustomRepeatType(days: days)
-                                    }
-                                    
-                                    firestoreManager.loadUserSettings(field: "selectedSound") {soundValue in
-                                        let soundType = (soundValue as? String) ?? "Chord"
-                                        setAlarm(
-                                            dateAndTime: date,
-                                            title: title,
-                                            description: description,
-                                            repeat_type: repeatType,
-                                            repeat_until_date: repeatUntil,
-                                            repeatIntervals: customRepeat,
-                                            reminderID: documentID,
-                                            soundType: soundType,
-                                            caretakerAlertDelay: caretakerAlertDelay
-                                        )
-                                    }
-                                    
-                                    print("Reminder has been marked as incomplete and alarm rescheduled for \(date)")
-                                }
+                            let repeatSettings = curReminderData["repeatSettings"] as? [String:Any]
+                            let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
+                            if repeatType == "None" {
+                                firestoreManager.updateReminderFields(
+                                    dateCreated: documentID,
+                                    fields: ["isComplete": false]
+                                )
+                                // Update UI immediately
+                                self.curReminderData["isComplete"] = false
+                                rescheduleNotification(repeats: false)
+                                
                             }
+                            else {
+                                firestoreManager.updateReminderFields(
+                                    dateCreated: documentID,
+                                    fields: ["completedInstances": FieldValue.arrayRemove([dateKey])]
+                                )
+                                var completed = curReminderData["completedInstances"] as? [Timestamp] ?? []
+                                completed.removeAll {
+                                    removeInstance in Calendar.current.isDate(dateKey, inSameDayAs: removeInstance.dateValue())
+                                }
+                                curReminderData["completedInstances"] = completed
+                                rescheduleNotification(repeats: true)
+                                onUpdate?()
+                            }
+                            
+
+                            
                         }
                         Button("Nevermind", role: .cancel) {}
                     }
@@ -667,6 +662,47 @@ struct ReminderRow: View {
             }
         }
     }
+    func rescheduleNotification(repeats: Bool) {
+        // Update (reset) the notification when marked as incomplete
+        firestoreManager.getReminder(dateCreated: documentID) { document in
+            guard let data = document?.data() else { return }
+
+            if let timestamp = data["date"] as? Timestamp {
+                let date = timestamp.dateValue()
+                let title = data["title"] as? String ?? ""
+                let description = data["description"] as? String ?? ""
+
+                let repeatSettings = data["repeatSettings"] as? [String: Any]
+                let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
+                let repeatUntil = repeatSettings?["repeat_until_date"] as? String ?? "Forever"
+                let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
+
+                var customRepeat: CustomRepeatType? = nil
+                if let repeatIntervals = repeatSettings?["repeatIntervals"] as? [String: Any],
+                   let days = repeatIntervals["days"] as? String {
+                    customRepeat = CustomRepeatType(days: days)
+                }
+                
+                firestoreManager.loadUserSettings(field: "selectedSound") {soundValue in
+                    let soundType = (soundValue as? String) ?? "Chord"
+                    setAlarm(
+                        dateAndTime: date,
+                        title: title,
+                        description: description,
+                        repeat_type: repeatType,
+                        repeat_until_date: repeatUntil,
+                        repeatIntervals: customRepeat,
+                        reminderID: documentID,
+                        soundType: soundType,
+                        caretakerAlertDelay: caretakerAlertDelay
+                    )
+                }
+                
+                print("Reminder has been marked as incomplete and alarm rescheduled for \(date)")
+            }
+        }
+    }
+    
 
 // Helper struct to mimic DocumentSnapshot for local UI change
 fileprivate struct LocalDocumentSnapshot: DocumentSnapshotProtocol {
