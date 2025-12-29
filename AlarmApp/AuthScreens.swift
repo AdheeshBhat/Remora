@@ -146,6 +146,10 @@ struct LoginScreen: View {
                 errorMessage = error.localizedDescription
             } else {
                 errorMessage = ""
+
+                // Ensure username -> UID mapping exists (fixes old accounts)
+                firestoreManager.ensureUsernameMappingExists()
+
                 // Navigate to HomeScreen
                 cur_screen = .HomeScreen
                 firestoreManager.checkIfCaretaker { isCaretaker in
@@ -298,6 +302,9 @@ struct RegistrationScreen: View {
                                         print("Username mapping saved successfully")
                                     }
                                 }
+                                
+                                // Ensure username -> UID mapping exists (fixes old accounts)
+                                firestoreManager.ensureUsernameMappingExists()
                                 
                                 // Navigate to appropriate HomeScreen
                                 cur_screen = .HomeScreen

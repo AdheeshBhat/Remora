@@ -29,39 +29,39 @@ class FirestoreManager: ObservableObject {
     //for caretakers viewing a senior's page
     var currentUID: String?
     @Published var isCaretakerViewingSenior: Bool = false
+
+    var activeUserUID: String {
+        if isCaretakerViewingSenior, let uid = currentUID {
+            return uid
+        } else {
+            return Auth.auth().currentUser?.uid ?? ""
+        }
+    }
         
         //MARK: Reminder-related functions
             //set, get, get for user, update, delete, get forever
     
     // Create a reminder
     func setReminder(reminderID: String, reminder: ReminderData) {
-        if let currentUser = Auth.auth().currentUser {
+        if Auth.auth().currentUser != nil {
             do {
-                //try db.collection("users").document(currentUser.uid).collection("reminders").document(getExactStringFromCurrentDate()).setData(from: reminder)
-                try db.collection("users").document(currentUser.uid).collection("reminders").document(reminderID).setData(from: reminder)
-                
+                try db.collection("users").document(activeUserUID).collection("reminders").document(reminderID).setData(from: reminder)
             } catch {
                 print("Failed setReminder")
             }
         }
-
-        
     }
 
     // Fetch a reminder
-    
     func getReminder(dateCreated: String, completion: @escaping (DocumentSnapshot?) -> Void) {
-        if let currentUser = Auth.auth().currentUser {
-            do {
-                db.collection("users").document(currentUser.uid).collection("reminders").document(dateCreated).getDocument { document, error in
-                    if let document = document, document.exists {
-                        //print("Fetched reminder")
-                        completion(document)
-                    } else {
-                        print("Reminder does not exist")
-                        completion(nil)
-                    }}
-                
+        if Auth.auth().currentUser != nil {
+            db.collection("users").document(activeUserUID).collection("reminders").document(dateCreated).getDocument { document, error in
+                if let document = document, document.exists {
+                    completion(document)
+                } else {
+                    print("Reminder does not exist")
+                    completion(nil)
+                }
             }
         }
     }
@@ -180,9 +180,8 @@ class FirestoreManager: ObservableObject {
 
     // Update specific fields of a reminder
     func updateReminderFields(dateCreated: String, fields: [String: Any], completion: @escaping (Bool) -> Void = { _ in }) {
-        if let currentUser = Auth.auth().currentUser {
-            let docRef = db.collection("users").document(currentUser.uid).collection("reminders").document(dateCreated)
-            
+        if Auth.auth().currentUser != nil {
+            let docRef = db.collection("users").document(activeUserUID).collection("reminders").document(dateCreated)
             docRef.getDocument { document, error in
                 if let document = document, document.exists {
                     docRef.updateData(fields) { error in
@@ -206,8 +205,8 @@ class FirestoreManager: ObservableObject {
     
     // Delete a specific field from a reminder
     func deleteReminderField(field: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        if let currentUser = Auth.auth().currentUser {
-            db.collection("users").document(currentUser.uid).updateData([field: FieldValue.delete()]) { error in
+        if Auth.auth().currentUser != nil {
+            db.collection("users").document(activeUserUID).updateData([field: FieldValue.delete()]) { error in
                 if let error = error {
                     completion(.failure(error))
                 } else {
@@ -215,13 +214,12 @@ class FirestoreManager: ObservableObject {
                 }
             }
         }
-        
     }
     
     //Delete a reminder document (a whole reminder, with all the fields)
     func deleteReminder(dateCreated: String, completion: ((Error?) -> Void)? = nil) {
-        if let currentUser = Auth.auth().currentUser {
-            db.collection("users").document(currentUser.uid).collection("reminders").document(dateCreated).delete { error in
+        if Auth.auth().currentUser != nil {
+            db.collection("users").document(activeUserUID).collection("reminders").document(dateCreated).delete { error in
                 if let error = error {
                     print("Error deleting reminder: \(error)")
                 } else {
@@ -328,13 +326,12 @@ class FirestoreManager: ObservableObject {
     
     // Get all forever repeating reminders for refreshing notifications
     func getForeverReminders(completion: @escaping ([String: ReminderData]?) -> Void) {
-        guard let currentUser = Auth.auth().currentUser else {
+        guard Auth.auth().currentUser != nil else {
             completion(nil)
             return
         }
-        
         db.collection("users")
-            .document(currentUser.uid)
+            .document(activeUserUID)
             .collection("reminders")
             .whereField("repeatSettings.repeat_until_date", isEqualTo: "Forever")
             .getDocuments { querySnapshot, error in
@@ -343,18 +340,14 @@ class FirestoreManager: ObservableObject {
                     completion(nil)
                     return
                 }
-                
                 guard let documents = querySnapshot?.documents else {
                     completion([:])
                     return
                 }
-                
                 var remindersDict: [String: ReminderData] = [:]
-                
                 for doc in documents {
                     let data = doc.data()
                     let documentID = doc.documentID
-                    
                     // Parse reminder data (same as getRemindersForUser)
                     let id = data["ID"] as? Int ?? 0
                     let title = data["title"] as? String ?? ""
@@ -364,19 +357,16 @@ class FirestoreManager: ObservableObject {
                     let isComplete = data["isComplete"] as? Bool ?? false
                     let isLocked = data["isLocked"] as? Bool ?? false
                     let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
-                    
                     let dateFromField: Date?
                     if let ts = data["date"] as? Timestamp {
                         dateFromField = ts.dateValue()
                     } else {
                         dateFromField = nil
                     }
-                    
                     let repeatSettings: RepeatSettings
                     if let rsMap = data["repeatSettings"] as? [String: Any] {
                         let repeatType = rsMap["repeat_type"] as? String ?? "None"
                         let repeatUntil = rsMap["repeat_until_date"] as? String ?? ""
-                        
                         let repeatIntervals: CustomRepeatType?
                         if let intervalsMap = rsMap["repeatIntervals"] as? [String: Any] {
                             let days = intervalsMap["days"] as? String
@@ -386,12 +376,10 @@ class FirestoreManager: ObservableObject {
                         } else {
                             repeatIntervals = nil
                         }
-                        
                         repeatSettings = RepeatSettings(repeat_type: repeatType, repeat_until_date: repeatUntil, repeatIntervals: repeatIntervals)
                     } else {
                         repeatSettings = RepeatSettings(repeat_type: "None", repeat_until_date: "")
                     }
-                    
                     let reminder = ReminderData(
                         ID: id,
                         date: dateFromField ?? Date(),
@@ -404,10 +392,8 @@ class FirestoreManager: ObservableObject {
                         isLocked: isLocked,
                         caretakerAlertDelay: caretakerAlertDelay
                     )
-                    
                     remindersDict[documentID] = reminder
                 }
-                
                 DispatchQueue.main.async { completion(remindersDict) }
             }
     }
@@ -527,7 +513,8 @@ class FirestoreManager: ObservableObject {
     
     // Saves a username-to-UID mapping when user registers
     func saveUsernameMapping(username: String, uid: String, completion: ((Error?) -> Void)? = nil) {
-        db.collection("usernameToUID").document(username).setData(["uid": uid]) { error in
+        let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        db.collection("usernameToUID").document(normalized).setData(["uid": uid]) { error in
             if let error = error {
                 print("Error saving username mapping: \(error.localizedDescription)")
             } else {
@@ -537,14 +524,45 @@ class FirestoreManager: ObservableObject {
         }
     }
     
+    func ensureUsernameMappingExists() {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+
+        getUsername { username in
+            guard let username = username else { return }
+
+            let normalized = username.lowercased()
+
+            let ref = Firestore.firestore()
+                .collection("usernameToUID")
+                .document(normalized)
+
+            ref.getDocument { doc, _ in
+                if doc?.exists == true {
+                    return // mapping already exists
+                }
+
+                ref.setData(["uid": uid]) { error in
+                    if let error = error {
+                        print("Failed to create username mapping:", error)
+                    } else {
+                        print("Username mapping created for \(normalized)")
+                    }
+                }
+            }
+        }
+    }
+    
     // Looks up UID for a given username
     func getUIDFromUsername(username: String, completion: @escaping (String?) -> Void) {
-        let ref = db.collection("usernameToUID").document(username)
+        let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let ref = db.collection("usernameToUID").document(normalized)
         ref.getDocument { doc, error in
-            if let doc = doc, doc.exists, let data = doc.data(), let uid = data["uid"] as? String {
+            if let doc = doc, doc.exists,
+               let data = doc.data(),
+               let uid = data["uid"] as? String {
                 completion(uid)
             } else {
-                print("Username not found or error: \(error?.localizedDescription ?? "unknown")")
+                print("Username not found for normalized username: \(normalized)")
                 completion(nil)
             }
         }
