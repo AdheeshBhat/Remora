@@ -121,8 +121,8 @@ struct RemindersScreen: View {
                     filterPeriod = "today"
                 }) {
                     Text("Day")
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.title3)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(filterPeriod == "today" ? Color.blue : Color.blue.opacity(0.1))
@@ -133,8 +133,8 @@ struct RemindersScreen: View {
                     filterPeriod = "week"
                 }) {
                     Text("Week")
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.title3)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(filterPeriod == "week" ? Color.blue : Color.blue.opacity(0.1))
@@ -145,8 +145,8 @@ struct RemindersScreen: View {
                     filterPeriod = "month"
                 }) {
                     Text("Month")
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.title3)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(filterPeriod == "month" ? Color.blue : Color.blue.opacity(0.1))

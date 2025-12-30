@@ -42,12 +42,15 @@ class FirestoreManager: ObservableObject {
             //set, get, get for user, update, delete, get forever
     
     // Create a reminder
-    func setReminder(reminderID: String, reminder: ReminderData) {
-        if Auth.auth().currentUser != nil {
+    func setReminder(reminderID: String, reminder: ReminderData, forUIDs: [String]? = nil) {
+        var targetUIDs = forUIDs ?? [activeUserUID]
+        if targetUIDs.isEmpty { return }
+
+        for uid in targetUIDs {
             do {
-                try db.collection("users").document(activeUserUID).collection("reminders").document(reminderID).setData(from: reminder)
+                try db.collection("users").document(uid).collection("reminders").document(reminderID).setData(from: reminder)
             } catch {
-                print("Failed setReminder")
+                print("Failed setReminder for uid \(uid): \(error)")
             }
         }
     }
@@ -179,27 +182,27 @@ class FirestoreManager: ObservableObject {
     
 
     // Update specific fields of a reminder
-    func updateReminderFields(dateCreated: String, fields: [String: Any], completion: @escaping (Bool) -> Void = { _ in }) {
-        if Auth.auth().currentUser != nil {
-            let docRef = db.collection("users").document(activeUserUID).collection("reminders").document(dateCreated)
-            docRef.getDocument { document, error in
-                if let document = document, document.exists {
-                    docRef.updateData(fields) { error in
-                        if let error = error {
-                            print("ERROR: Update failed: \(error)")
-                            completion(false)
-                        } else {
-                            print("SUCCESS: Document updated")
-                            completion(true)
-                        }
-                    }
-                } else {
-                    print("ERROR: Document '\(dateCreated)' does not exist")
-                    completion(false)
+    func updateReminderFields(dateCreated: String, fields: [String: Any], forUIDs: [String]? = nil, completion: @escaping (Bool) -> Void = { _ in }) {
+        var targetUIDs = forUIDs ?? [activeUserUID]
+        if targetUIDs.isEmpty { completion(false); return }
+
+        let dispatchGroup = DispatchGroup()
+        var success = true
+
+        for uid in targetUIDs {
+            dispatchGroup.enter()
+            let docRef = db.collection("users").document(uid).collection("reminders").document(dateCreated)
+            docRef.updateData(fields) { error in
+                if let error = error {
+                    print("Update failed for uid \(uid): \(error)")
+                    success = false
                 }
+                dispatchGroup.leave()
             }
-        } else {
-            completion(false)
+        }
+
+        dispatchGroup.notify(queue: .main) {
+            completion(success)
         }
     }
     
@@ -445,18 +448,8 @@ class FirestoreManager: ObservableObject {
     
     
     // Gets current user's first name
-    func getUserFirstName(completion: @escaping (String?) -> Void) {
-        guard let currentUser = Auth.auth().currentUser else {
-            completion(nil)
-            return
-        }
-        let userRef = db.collection("users").document(currentUser.uid)
-        userRef.getDocument { document, error in
-            if let error = error {
-                print("Error fetching user first name: \(error)")
-                completion(nil)
-                return
-            }
+    func getUserFirstName(forUID uid: String, completion: @escaping (String?) -> Void) {
+        db.collection("users").document(uid).getDocument { document, error in
             if let document = document, document.exists {
                 let firstName = document.data()?["firstName"] as? String
                 completion(firstName)
@@ -554,18 +547,40 @@ class FirestoreManager: ObservableObject {
     
     // Looks up UID for a given username
     func getUIDFromUsername(username: String, completion: @escaping (String?) -> Void) {
-        let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let ref = db.collection("usernameToUID").document(normalized)
+        let ref = db.collection("usernameToUID").document(username)
         ref.getDocument { doc, error in
             if let doc = doc, doc.exists,
                let data = doc.data(),
                let uid = data["uid"] as? String {
                 completion(uid)
             } else {
-                print("Username not found for normalized username: \(normalized)")
+                print("Username not found for  username: \(username)")
                 completion(nil)
             }
         }
+    }
+    
+    // Fetch linked senior UIDs (document IDs)
+    func getLinkedSeniorUIDs(completion: @escaping ([String]) -> Void) {
+        guard let caretaker = Auth.auth().currentUser else {
+            completion([])
+            return
+        }
+
+        db.collection("users")
+            .document(caretaker.uid)
+            .collection("linkedSeniors")
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("Error fetching linked senior UIDs: \(error)")
+                    completion([])
+                    return
+                }
+
+                // documentID == seniorUID
+                let seniorUIDs = snapshot?.documents.map { $0.documentID } ?? []
+                completion(seniorUIDs)
+            }
     }
 
     // Links a senior to caretaker
@@ -575,18 +590,25 @@ class FirestoreManager: ObservableObject {
             return
         }
 
-        let ref = db.collection("users")
+        let caretakerRef = db.collection("users")
             .document(caretaker.uid)
             .collection("linkedSeniors")
             .document(seniorUID)
 
-        ref.setData(["username": seniorUsername]) { error in
+        caretakerRef.setData(["username": seniorUsername]) { error in
             if let error = error {
                 print("Error linking senior: \(error.localizedDescription)")
             } else {
                 print("Linked senior \(seniorUsername) successfully")
             }
             completion?(error)
+        }
+        
+        let seniorRef = db.collection("users").document(seniorUID)
+        seniorRef.updateData([
+            "LinkedCaretakers": FieldValue.arrayUnion([caretaker.uid])
+        ]) { seniorError in
+            completion?(seniorError)
         }
     }
 
@@ -607,6 +629,17 @@ class FirestoreManager: ObservableObject {
                     completion([])
                 }
             }
+    }
+    
+    func getLinkedCaretakersForSenior(seniorUID: String, completion: @escaping ([String]) -> Void) {
+        let seniorRef = db.collection("users").document(seniorUID)
+        seniorRef.getDocument { document, error in
+            if let data = document?.data(), let caretakers = data["LinkedCaretakers"] as? [String] {
+                completion(caretakers)
+            } else {
+                completion([])
+            }
+        }
     }
     
     // Unlink a senior from caretaker
@@ -644,6 +677,49 @@ class FirestoreManager: ObservableObject {
                 }
             }
         }
+    }
+    
+    func cancelAllCaretakerNotificationsFromSenior(seniorUID: String) {
+        let caretakerUID = Auth.auth().currentUser?.uid ?? ""
+        guard !caretakerUID.isEmpty else { return }
+
+        db
+            .collection("users")
+            .document(caretakerUID)
+            .collection("reminders")
+            .getDocuments { snapshot, error in
+                guard let documents = snapshot?.documents else { return }
+
+                for doc in documents {
+                    let data = doc.data()
+
+                    // We rely on author == seniorUID
+                    let authorUID = data["author"] as? String ?? ""
+                    if authorUID != seniorUID { continue }
+
+                    let reminderID = doc.documentID
+                    let baseID = createUniqueIDFromDate(
+                        date: createExactDateFromString(dateString: reminderID)
+                    )
+
+                    var identifiers: [String] = []
+
+                    // Main notifications
+                    for i in 0..<30 {
+                        identifiers.append("\(baseID)-\(i)")
+                    }
+
+                    // Follow-ups
+                    for i in 0..<30 {
+                        identifiers.append("\(baseID)-followup-\(i)")
+                    }
+
+                    UNUserNotificationCenter.current()
+                        .removePendingNotificationRequests(withIdentifiers: identifiers)
+
+                    print("Cancelled caretaker notifications for reminder \(reminderID)")
+                }
+            }
     }
     
 }

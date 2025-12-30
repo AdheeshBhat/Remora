@@ -46,8 +46,15 @@ struct HomeView: View {
             .padding(.vertical, 4)
 
             // Welcome & today's date
-            WelcomeExperience()
-
+            if firestoreManager.isCaretakerViewingSenior, let seniorUID = firestoreManager.currentUID {
+                // Show the senior's name when caretaker is viewing their account
+                WelcomeExperience(uidToDisplay: seniorUID)
+            } else {
+                // Show caretaker's own name normally
+                WelcomeExperience(uidToDisplay: firestoreManager.activeUserUID)
+            }
+            
+            
             // Today's reminders
             TodayRemindersExperience(
                 cur_screen: $cur_screen,

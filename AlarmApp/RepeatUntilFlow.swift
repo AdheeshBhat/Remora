@@ -35,78 +35,97 @@ struct RepeatUntilFlow: View {
         self.firestoreManager = firestoreManager
     }
 
+    var options = ["Forever", "Specific Date"]
+    
     var body: some View {
         VStack(spacing: 20) {
-            Text(title)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // TITLE
+                    Text(title)
+                        .font(.title)
+                        .fontWeight(.medium)
+                        .padding(.top)
+                        .frame(maxWidth: .infinity, alignment: .center)
 
-            VStack(spacing: 0) {
-                ForEach(["Forever", "Specific Date"], id: \.self) { option in
-                    Button(action: {
-                        repeatUntilOptionSelected = option
-                    }) {
-                        HStack {
-                            Text(option)
-                                .foregroundColor(.primary)
-                                .font(.title3)
-                                .padding(.leading)
-                            Spacer()
-                            if repeatUntilOptionSelected == option {
-                                Image(systemName: "checkmark")
-                                    .font(.title)
-                                    .foregroundColor(Color(red: 0.0, green: 1, blue: 0.0))
-                                    .padding(.trailing)
+                    // OPTIONS LIST
+                    VStack(spacing: 0) {
+                        ForEach(options, id: \.self) { option in
+                            Button(action: {
+                                repeatUntilOptionSelected = option
+                            }) {
+                                HStack {
+                                    Text(option)
+                                        .foregroundColor(.primary)
+                                        .font(.headline)
+                                        .fontWeight(.medium)
+                                        .padding(.leading, 16)
+                                    Spacer()
+                                    if repeatUntilOptionSelected == option {
+                                        Image(systemName: "checkmark")
+                                            .font(.title2)
+                                            .foregroundColor(.green)
+                                            .padding(.trailing, 16)
+                                    }
+                                }
+                                .padding(.vertical, 16)
                             }
-                        } //HStack ending
-                        .padding(.vertical, 18)
+                            if option != options.last {
+                                Divider()
+                                    .background(Color.blue.opacity(0.3))
+                                    .padding(.horizontal, 16)
+                            }
+                        }
                     }
-                    Divider()
-                        .background(Color.gray)
-                        .padding(.horizontal, 20)
-                }
-            }
-            .background(Color.blue.opacity(0.7))
-            .cornerRadius(12)
-            .padding(.horizontal)
+                    .background(Color.blue.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                    )
+                    .cornerRadius(12)
+                    .padding(.horizontal)
 
-            // CALENDAR
-            if repeatUntilOptionSelected == "Specific Date" {
-                DatePicker(
-                    "Select Date",
-                    selection: $selectedDate,
-                    displayedComponents: [.date]
-                )
-                .datePickerStyle(.graphical)
-                .padding()
-            }
+                    // CALENDAR
+                    if repeatUntilOptionSelected == "Specific Date" {
+                        DatePicker(
+                            "Select Date",
+                            selection: $selectedDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(.graphical)
+                        .padding()
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(.horizontal)
+                    }
+                } // VStack inside ScrollView
+            } // ScrollView ending
             
-            Spacer()
-
-            //DONE BUTTON
+            // DONE BUTTON
             Button(action: {
                 if repeatUntilOptionSelected == "Specific Date" {
                     repeatUntil = createStringFromDate(date: selectedDate)
                 } else {
                     repeatUntil = repeatUntilOptionSelected
                 }
-
                 
                 presentationMode.wrappedValue.dismiss()
             }) {
                 Text("Done")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(Color(red: 0.0, green: 1, blue: 0.0))
+                    .font(.headline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue.opacity(0.7))
+                    .padding(16)
+                    .background(Color.green)
                     .cornerRadius(12)
             }
             .padding(.horizontal)
             .padding(.bottom)
-            
             
             .onAppear {
                 if repeatUntil == "Forever" {

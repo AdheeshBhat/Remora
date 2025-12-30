@@ -20,7 +20,7 @@ func requestNotificationPermission() {
 }
 
 
-func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String, caretakerAlertDelay: TimeInterval) {
+func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String, caretakerAlertDelay: TimeInterval, forUIDs: [String]? = nil, isCaretakerNotification: Bool = false) {
     print("setAlarm called for reminderID: \(reminderID), repeat_type: \(repeat_type), repeat_until_date: \(repeat_until_date), date: \(dateAndTime)")
 
     // Handle forever repeating alarms with NotificationManager
@@ -46,8 +46,22 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
     }
     
     let content = UNMutableNotificationContent()
-    content.title = title
-    content.body = description
+
+    if isCaretakerNotification {
+        content.title = "🚨 Caretaker Alert"
+        content.body = description
+        content.userInfo = [
+            "role": "caretaker",
+            "reminderID": reminderID
+        ]
+    } else {
+        content.title = title
+        content.body = description
+        content.userInfo = [
+            "role": "senior",
+            "reminderID": reminderID
+        ]
+    }
 //    content.sound = soundType == "Alert"
 //        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
 //        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
@@ -151,9 +165,11 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
     // Schedule notifications
     print("Triggers to schedule for reminder \(reminderID): \(triggers)")
     for (index, triggerDate) in triggers.enumerated() {
-        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate)
+        let mainTriggerDate = isCaretakerNotification ? triggerDate.addingTimeInterval(caretakerAlertDelay) : triggerDate
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: mainTriggerDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-        let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)"
+        let role = isCaretakerNotification ? "caretaker" : "senior"
+        let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)-\(role)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
@@ -280,4 +296,14 @@ func cancelSingleAlarmInstance(reminderID: String, instanceIndex: Int) {
     )
 
     print("Cancelled single alarm instance: \(mainIdentifier) and follow-up")
+}
+
+
+func cancelAllNotificationsForCurrentUser() {
+    let center = UNUserNotificationCenter.current()
+
+    center.removeAllPendingNotificationRequests()
+    center.removeAllDeliveredNotifications()
+
+    print("🔕 All notifications cancelled for current user")
 }

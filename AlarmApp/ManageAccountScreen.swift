@@ -37,6 +37,7 @@ struct ManageAccountScreen: View {
                         DispatchQueue.main.async {
                             switch result {
                             case .success:
+                                cancelAllNotificationsForCurrentUser()
                                 // Log out user after deletion
                                 do {
                                     try Auth.auth().signOut()

@@ -13,6 +13,7 @@ struct CaretakerHomeView: View {
     @State private var seniors: [String] = []
     @State private var showingAddSenior = false
     @State private var selectedSeniorUID: String? = nil
+    @State private var displayedName: String = ""
 
     var body: some View {
         VStack {
@@ -45,8 +46,9 @@ struct CaretakerHomeView: View {
                 .padding(.trailing)
             }
 
-            // Welcome & date
-            WelcomeExperience()
+        
+            WelcomeExperience(uidToDisplay: firestoreManager.activeUserUID)
+            
 
             // Seniors list or empty message
             if seniors.isEmpty {
@@ -65,6 +67,7 @@ struct CaretakerHomeView: View {
                                 DispatchQueue.main.async {
                                     firestoreManager.isCaretakerViewingSenior = true
                                     selectedSeniorUID = uid
+                                    displayedName = senior
                                 }
                             }
                         }) {
@@ -85,6 +88,30 @@ struct CaretakerHomeView: View {
                                                 }
                                             }
                                         }
+//                                        firestoreManager.getUIDFromUsername(username: senior) { seniorUID in
+//                                            guard let seniorUID = seniorUID else { return }
+//
+//                                            // STEP 2: Unlink senior in Firestore
+//                                            firestoreManager.unlinkSenior(username: senior) { error in
+//                                                if let error = error {
+//                                                    print("Error unlinking senior: \(error.localizedDescription)")
+//                                                    return
+//                                                }
+//
+//                                                // STEP 3: Cancel caretaker notifications originating from this senior
+//                                                NotificationManager.shared
+//                                                    .cancelAllCaretakerNotificationsFromSenior(
+//                                                        seniorUID: seniorUID
+//                                                    )
+//
+//                                                // STEP 4: Refresh seniors list in UI
+//                                                firestoreManager.fetchLinkedSeniors { names in
+//                                                    DispatchQueue.main.async {
+//                                                        self.seniors = names
+//                                                    }
+//                                                }
+//                                            }
+//                                        }
                                     } label: {
                                         Text("Unlink")
                                     }
