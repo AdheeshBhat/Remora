@@ -685,17 +685,56 @@ struct ReminderRow: View {
                 
                 firestoreManager.loadUserSettings(field: "selectedSound") {soundValue in
                     let soundType = (soundValue as? String) ?? "Chord"
-                    setAlarm(
-                        dateAndTime: date,
-                        title: title,
-                        description: description,
-                        repeat_type: repeatType,
-                        repeat_until_date: repeatUntil,
-                        repeatIntervals: customRepeat,
-                        reminderID: documentID,
-                        soundType: soundType,
-                        caretakerAlertDelay: caretakerAlertDelay
-                    )
+                    let activeUID = firestoreManager.activeUserUID
+
+                    firestoreManager.checkIfCaretaker { isCaretaker in
+                        if isCaretaker {
+                            // Caretaker rescheduling senior reminder
+                            firestoreManager.getLinkedSeniorUIDs { seniorUIDs in
+                                //for seniorUID in seniorUIDs {
+                                    firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                        guard let seniorName = seniorName else { return }
+                                        setAlarm(
+                                            dateAndTime: date,
+                                            title: title,
+                                            description: description,
+                                            repeat_type: repeatType,
+                                            repeat_until_date: repeatUntil,
+                                            repeatIntervals: customRepeat,
+                                            reminderID: documentID,
+                                            soundType: soundType,
+                                            caretakerAlertDelay: caretakerAlertDelay,
+                                            isCaretakerNotification: true,
+                                            seniorName: seniorName
+                                        )
+                                    }
+                                //}
+                            }
+                        } else {
+                            // Senior rescheduling reminder
+                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                //let targets = [activeUID] + caretakerUIDs
+                                //for _ in targets {
+                                    firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                        guard let seniorName = seniorName else { return }
+                                        setAlarm(
+                                            dateAndTime: date,
+                                            title: title,
+                                            description: description,
+                                            repeat_type: repeatType,
+                                            repeat_until_date: repeatUntil,
+                                            repeatIntervals: customRepeat,
+                                            reminderID: documentID,
+                                            soundType: soundType,
+                                            caretakerAlertDelay: caretakerAlertDelay,
+                                            isCaretakerNotification: false,
+                                            seniorName: seniorName
+                                        )
+                                    }
+                                //}
+                            }
+                        }
+                    }
                 }
                 
                 print("Reminder has been marked as incomplete and alarm rescheduled for \(date)")

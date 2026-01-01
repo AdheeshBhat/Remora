@@ -249,7 +249,7 @@ extension SettingsScreen {
             
             if isDropdownVisible {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(["Chord", "Alert", "Xylophone", "Marimba 1", "Marimba 2"], id: \.self) { sound in
+                    ForEach(["Chord", "Alert", "Xylophone", "Marimba 1", "Marimba 2", "Chime", "Pulse"], id: \.self) { sound in
                         Button(action: {
                             selectedSound = sound
                             isDropdownVisible = false

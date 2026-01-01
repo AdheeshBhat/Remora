@@ -43,7 +43,7 @@ class FirestoreManager: ObservableObject {
     
     // Create a reminder
     func setReminder(reminderID: String, reminder: ReminderData, forUIDs: [String]? = nil) {
-        var targetUIDs = forUIDs ?? [activeUserUID]
+        let targetUIDs = forUIDs ?? [activeUserUID]
         if targetUIDs.isEmpty { return }
 
         for uid in targetUIDs {
@@ -183,7 +183,7 @@ class FirestoreManager: ObservableObject {
 
     // Update specific fields of a reminder
     func updateReminderFields(dateCreated: String, fields: [String: Any], forUIDs: [String]? = nil, completion: @escaping (Bool) -> Void = { _ in }) {
-        var targetUIDs = forUIDs ?? [activeUserUID]
+        let targetUIDs = forUIDs ?? [activeUserUID]
         if targetUIDs.isEmpty { completion(false); return }
 
         let dispatchGroup = DispatchGroup()

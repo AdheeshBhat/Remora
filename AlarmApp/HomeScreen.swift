@@ -48,10 +48,10 @@ struct HomeView: View {
             // Welcome & today's date
             if firestoreManager.isCaretakerViewingSenior, let seniorUID = firestoreManager.currentUID {
                 // Show the senior's name when caretaker is viewing their account
-                WelcomeExperience(uidToDisplay: seniorUID)
+                WelcomeExperience(firestoreManager: firestoreManager, uidToDisplay: seniorUID)
             } else {
                 // Show caretaker's own name normally
-                WelcomeExperience(uidToDisplay: firestoreManager.activeUserUID)
+                WelcomeExperience(firestoreManager: firestoreManager, uidToDisplay: firestoreManager.activeUserUID)
             }
             
             

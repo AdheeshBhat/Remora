@@ -24,6 +24,7 @@ struct EditReminderScreen: View {
     @State var selectedSound: String = "Chord"
     @State var hasLoadedFromFirebase: Bool = false
     @State private var caretakerAlertDelay: TimeInterval = 1800
+    @State private var reminderOwnerUID: String = ""
     let firestoreManager: FirestoreManager
     let reminderID: String
     let onUpdate: (() -> Void)?
@@ -238,23 +239,61 @@ struct EditReminderScreen: View {
                                     
                                     // Cancel the old notification and set a new one
                                     cancelAlarm(reminderID: reminderID)
-                                    if !isComplete {
-                                        firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                            let soundType = (soundValue as? String) ?? "Chord"
-                                            setAlarm(
-                                                dateAndTime: localDate,
-                                                title: localTitle,
-                                                description: localDescription,
-                                                repeat_type: localEditScreenRepeatSetting,
-                                                repeat_until_date: localEditScreenRepeatUntil,
-                                                repeatIntervals: customRepeatType,
-                                                reminderID: reminderID,
-                                                soundType: soundType,
-                                                caretakerAlertDelay: caretakerAlertDelay
-                                            )
-                                            print("soundType is " + soundType)
+                                    guard !isComplete else { return }
+
+                                    let activeUID = firestoreManager.activeUserUID
+
+                                    firestoreManager.checkIfCaretaker { isCaretaker in
+                                        if isCaretaker {
+                                            // Caretaker editing a senior’s reminder: always use the senior that owns the reminder
+                                            let seniorUID = reminderOwnerUID.isEmpty ? activeUID : reminderOwnerUID
+                                            firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                                let soundType = (soundValue as? String) ?? "Chord"
+                                                firestoreManager.getUserFirstName(forUID: seniorUID) { seniorName in
+                                                    guard let seniorName = seniorName else { return }
+                                                    setAlarm(
+                                                        dateAndTime: localDate,
+                                                        title: localTitle,
+                                                        description: localDescription,
+                                                        repeat_type: localEditScreenRepeatSetting,
+                                                        repeat_until_date: localEditScreenRepeatUntil,
+                                                        repeatIntervals: customRepeatType,
+                                                        reminderID: reminderID,
+                                                        soundType: soundType,
+                                                        caretakerAlertDelay: caretakerAlertDelay,
+                                                        isCaretakerNotification: true,
+                                                        seniorName: seniorName
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            // Senior editing their own reminder (unchanged)
+                                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                                //let targetUIDs = [activeUID] + caretakerUIDs
+
+                                                //for _ in targetUIDs {
+                                                    firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                                        let soundType = (soundValue as? String) ?? "Chord"
+                                                        firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                                            guard let seniorName = seniorName else { return }
+                                                            setAlarm(
+                                                                dateAndTime: localDate,
+                                                                title: localTitle,
+                                                                description: localDescription,
+                                                                repeat_type: localEditScreenRepeatSetting,
+                                                                repeat_until_date: localEditScreenRepeatUntil,
+                                                                repeatIntervals: customRepeatType,
+                                                                reminderID: reminderID,
+                                                                soundType: soundType,
+                                                                caretakerAlertDelay: caretakerAlertDelay,
+                                                                isCaretakerNotification: false,
+                                                                seniorName: seniorName
+                                                            )
+                                                        }
+                                                    }
+                                                //}
+                                            }
                                         }
-                                        
                                     }
                                     
                                     onUpdate?()
@@ -290,7 +329,7 @@ struct EditReminderScreen: View {
             // Load fresh reminder data from Firebase
             firestoreManager.getReminder(dateCreated: reminderID) { document in
                 guard let data = document?.data() else { return }
-                
+
                 if !hasLoadedFromFirebase {
                     hasLoadedFromFirebase = true
                     if let timestamp = data["date"] as? Timestamp {
@@ -327,8 +366,13 @@ struct EditReminderScreen: View {
                     if let complete = data["isComplete"] as? Bool {
                         isComplete = complete
                     }
+                    // Set reminderOwnerUID from Firestore document
+                    if let authorUID = data["authorUID"] as? String {
+                        reminderOwnerUID = authorUID
+                    } else {
+                        reminderOwnerUID = firestoreManager.activeUserUID
+                    }
                 }
-                
             }
         }
 

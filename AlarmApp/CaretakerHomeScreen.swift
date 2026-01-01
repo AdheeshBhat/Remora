@@ -47,7 +47,7 @@ struct CaretakerHomeView: View {
             }
 
         
-            WelcomeExperience(uidToDisplay: firestoreManager.activeUserUID)
+            WelcomeExperience(firestoreManager: firestoreManager, uidToDisplay: firestoreManager.activeUserUID)
             
 
             // Seniors list or empty message

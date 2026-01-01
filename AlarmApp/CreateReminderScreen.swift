@@ -240,42 +240,16 @@ struct CreateReminderScreen: View {
                                 if isCaretaker {
                                     // Caretaker creating reminder for a linked senior
                                     firestoreManager.getLinkedSeniorUIDs { seniorUIDs in
-                                        for seniorUID in seniorUIDs {
-                                            let targetUIDs = [activeUID, seniorUID]
-
-                                            firestoreManager.setReminder(
-                                                reminderID: reminderID,
-                                                reminder: reminder,
-                                                forUIDs: targetUIDs
-                                            )
-
-                                            for _ in targetUIDs {
-                                                firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                                    let soundType = (soundValue as? String) ?? "Chord"
-                                                    setAlarm(
-                                                        dateAndTime: date,
-                                                        title: title,
-                                                        description: description,
-                                                        repeat_type: reminder.repeatSettings.repeat_type,
-                                                        repeat_until_date: reminder.repeatSettings.repeat_until_date,
-                                                        repeatIntervals: reminder.repeatSettings.repeatIntervals,
-                                                        reminderID: reminderID,
-                                                        soundType: soundType,
-                                                        caretakerAlertDelay: caretakerAlertDelay
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // Senior creating reminder
-                                    firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-                                        let targetUIDs = [activeUID] + caretakerUIDs
-                                        firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: targetUIDs)
-                                        
-                                        for uid in targetUIDs {
-                                            firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                                let soundType = (soundValue as? String) ?? "Chord"
+                                        firestoreManager.setReminder(
+                                            reminderID: reminderID,
+                                            reminder: reminder,
+                                            forUIDs: [activeUID]
+                                        )
+                                        // Only set the alarm for the senior, passing their name
+                                        firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                            let soundType = (soundValue as? String) ?? "Chord"
+                                            firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                                guard let seniorName = seniorName else { return }
                                                 setAlarm(
                                                     dateAndTime: date,
                                                     title: title,
@@ -286,7 +260,37 @@ struct CreateReminderScreen: View {
                                                     reminderID: reminderID,
                                                     soundType: soundType,
                                                     caretakerAlertDelay: caretakerAlertDelay,
-                                                    isCaretakerNotification: uid != activeUID
+                                                    isCaretakerNotification: true,
+                                                    seniorName: seniorName
+                                                )
+                                            }
+                                        }
+                                        
+                                    }
+                                } else {
+                                    // Senior creating reminder
+                                    firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                        firestoreManager.setReminder(
+                                            reminderID: reminderID,
+                                            reminder: reminder,
+                                            forUIDs: [activeUID]
+                                        )
+                                        firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                            let soundType = (soundValue as? String) ?? "Chord"
+                                            firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                                guard let seniorName = seniorName else { return }
+                                                setAlarm(
+                                                    dateAndTime: date,
+                                                    title: title,
+                                                    description: description,
+                                                    repeat_type: reminder.repeatSettings.repeat_type,
+                                                    repeat_until_date: reminder.repeatSettings.repeat_until_date,
+                                                    repeatIntervals: reminder.repeatSettings.repeatIntervals,
+                                                    reminderID: reminderID,
+                                                    soundType: soundType,
+                                                    caretakerAlertDelay: caretakerAlertDelay,
+                                                    isCaretakerNotification: false,
+                                                    seniorName: seniorName
                                                 )
                                             }
                                         }
@@ -327,7 +331,7 @@ struct CreateReminderScreen: View {
 // Helper to display caretaker alert delay as human-readable
 func humanReadableCaretakerDelay(_ delay: TimeInterval) -> String {
     switch Int(delay) {
-    case 600: return "10 mins"
+    case 60: return "10 mins"
     case 1800: return "30 mins"
     case 3600: return "1 hr"
     case 7200: return "2 hrs"

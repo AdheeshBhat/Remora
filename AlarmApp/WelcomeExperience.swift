@@ -6,12 +6,11 @@
 //
 import SwiftUI
 
-import SwiftUI
-
 struct WelcomeExperience: View {
+    let firestoreManager: FirestoreManager
     let uidToDisplay: String
     @State private var firstName: String = ""
-    let firestoreManager = FirestoreManager()
+
 
     var body: some View {
         VStack {
