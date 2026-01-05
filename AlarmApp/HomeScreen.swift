@@ -18,13 +18,13 @@ struct HomeView: View {
             // Top bar
             HStack {
                 if firestoreManager.isCaretakerViewingSenior {
-                    Button(action: {
-                        // Update the screen enum
-                        cur_screen = .CaretakerHomeScreen
-                        firestoreManager.isCaretakerViewingSenior = false
-                        // Dismiss any NavigationLink stack
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
+                    //BACK TO SENIORS BUTTON
+                    NavigationLink(
+                        destination: CaretakerHomeView(
+                            cur_screen: $cur_screen,
+                            firestoreManager: firestoreManager
+                        )
+                    ) {
                         HStack {
                             Image(systemName: "arrow.left")
                             Text("Back to Seniors")
@@ -34,6 +34,10 @@ struct HomeView: View {
                         .background(Color.blue.opacity(0.1))
                         .cornerRadius(8)
                     }
+                    .simultaneousGesture(TapGesture().onEnded {
+                        cur_screen = .CaretakerHomeScreen
+                        firestoreManager.isCaretakerViewingSenior = false
+                    })
                 } else {
                     SettingsExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
                 }
@@ -46,8 +50,15 @@ struct HomeView: View {
             .padding(.vertical, 4)
 
             // Welcome & today's date
-            WelcomeExperience()
-
+            if firestoreManager.isCaretakerViewingSenior, let seniorUID = firestoreManager.currentUID {
+                // Show the senior's name when caretaker is viewing their account
+                WelcomeExperience(firestoreManager: firestoreManager, uidToDisplay: seniorUID)
+            } else {
+                // Show caretaker's own name normally
+                WelcomeExperience(firestoreManager: firestoreManager, uidToDisplay: firestoreManager.activeUserUID)
+            }
+            
+            
             // Today's reminders
             TodayRemindersExperience(
                 cur_screen: $cur_screen,

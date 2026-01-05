@@ -94,19 +94,67 @@ struct RemindersScreen: View {
 
     // MARK: - Subviews split for type-checking
     private var header: some View {
-        ZStack {
-            HStack {
-                SettingsExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
-                Spacer()
-            }
-            Text("Reminders")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-                .frame(maxWidth: .infinity, alignment: .center)
-            HStack {
-                Spacer()
-                CreateReminderExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+        VStack(spacing: 8) {
+            if firestoreManager.isCaretakerViewingSenior {
+                // Caretaker view: back button + title + create reminder button
+                VStack(spacing: 4) {
+                    HStack {
+                        // BACK TO SENIORS BUTTON
+                        NavigationLink(
+                            destination: CaretakerHomeView(
+                                cur_screen: $cur_screen,
+                                firestoreManager: firestoreManager
+                            )
+                        ) {
+                            HStack {
+                                Image(systemName: "arrow.left")
+                                Text("Back to Seniors")
+                                    .fontWeight(.semibold)
+                            }
+                            .padding(8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        .simultaneousGesture(TapGesture().onEnded {
+                            cur_screen = .CaretakerHomeScreen
+                            firestoreManager.isCaretakerViewingSenior = false
+                        })
+
+                        Spacer()
+
+                        // CREATE REMINDER BUTTON
+                        CreateReminderExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                    }
+
+                    // Title below buttons
+                    RemindersScreenTitle(
+                        firestoreManager: firestoreManager,
+                        uidToDisplay: firestoreManager.currentUID ?? firestoreManager.activeUserUID
+                    )
+                }
+            } else {
+                // Senior view: everything on the same HStack
+                ZStack {
+                    HStack {
+                        // SETTINGS BUTTON
+                        SettingsExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                        Spacer()
+                    }
+                        
+                    // TITLE
+                    Text("Reminders")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+ 
+                    HStack {
+                        Spacer()
+                        // CREATE REMINDER BUTTON
+                        CreateReminderExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                    }
+                }
+                
             }
         }
         .padding(.horizontal)
@@ -121,8 +169,8 @@ struct RemindersScreen: View {
                     filterPeriod = "today"
                 }) {
                     Text("Day")
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.title3)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(filterPeriod == "today" ? Color.blue : Color.blue.opacity(0.1))
@@ -133,8 +181,8 @@ struct RemindersScreen: View {
                     filterPeriod = "week"
                 }) {
                     Text("Week")
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.title3)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(filterPeriod == "week" ? Color.blue : Color.blue.opacity(0.1))
@@ -145,8 +193,8 @@ struct RemindersScreen: View {
                     filterPeriod = "month"
                 }) {
                     Text("Month")
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.title3)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(filterPeriod == "month" ? Color.blue : Color.blue.opacity(0.1))
@@ -166,9 +214,12 @@ struct RemindersScreen: View {
                             swipeOffset = 0
                         }
                     )
+//                    .font(.title2)
+//                    .fontWeight(.semibold)
+//                    .foregroundColor(.primary)
                 } else {
                     Text(currentPeriodText)
-                        .font(.title2)
+                        .font(.title)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
                 }
@@ -685,17 +736,56 @@ struct ReminderRow: View {
                 
                 firestoreManager.loadUserSettings(field: "selectedSound") {soundValue in
                     let soundType = (soundValue as? String) ?? "Chord"
-                    setAlarm(
-                        dateAndTime: date,
-                        title: title,
-                        description: description,
-                        repeat_type: repeatType,
-                        repeat_until_date: repeatUntil,
-                        repeatIntervals: customRepeat,
-                        reminderID: documentID,
-                        soundType: soundType,
-                        caretakerAlertDelay: caretakerAlertDelay
-                    )
+                    let activeUID = firestoreManager.activeUserUID
+
+                    firestoreManager.checkIfCaretaker { isCaretaker in
+                        if isCaretaker {
+                            // Caretaker rescheduling senior reminder
+                            firestoreManager.getLinkedSeniorUIDs { seniorUIDs in
+                                //for seniorUID in seniorUIDs {
+                                    firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                        guard let seniorName = seniorName else { return }
+                                        setAlarm(
+                                            dateAndTime: date,
+                                            title: title,
+                                            description: description,
+                                            repeat_type: repeatType,
+                                            repeat_until_date: repeatUntil,
+                                            repeatIntervals: customRepeat,
+                                            reminderID: documentID,
+                                            soundType: soundType,
+                                            caretakerAlertDelay: caretakerAlertDelay,
+                                            isCaretakerNotification: true,
+                                            seniorName: seniorName
+                                        )
+                                    }
+                                //}
+                            }
+                        } else {
+                            // Senior rescheduling reminder
+                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                //let targets = [activeUID] + caretakerUIDs
+                                //for _ in targets {
+                                    firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                        guard let seniorName = seniorName else { return }
+                                        setAlarm(
+                                            dateAndTime: date,
+                                            title: title,
+                                            description: description,
+                                            repeat_type: repeatType,
+                                            repeat_until_date: repeatUntil,
+                                            repeatIntervals: customRepeat,
+                                            reminderID: documentID,
+                                            soundType: soundType,
+                                            caretakerAlertDelay: caretakerAlertDelay,
+                                            isCaretakerNotification: false,
+                                            seniorName: seniorName
+                                        )
+                                    }
+                                //}
+                            }
+                        }
+                    }
                 }
                 
                 print("Reminder has been marked as incomplete and alarm rescheduled for \(date)")

@@ -15,7 +15,12 @@ class NotificationManager: ObservableObject {
     
     private init() {}
     
-    func scheduleForeverRepeatingAlarm(reminder: ReminderData, reminderID: String) {
+    func scheduleForeverRepeatingAlarm(
+        reminder: ReminderData,
+        reminderID: String,
+        isCaretakerNotification: Bool = false,
+        seniorName: String? = nil
+    ) {
         guard reminder.repeatSettings.repeat_until_date == "Forever" else {
             FirestoreManager().loadUserSettings(field: "selectedSound") { soundValue in
                 let soundType = (soundValue as? String) ?? "Chord"
@@ -29,14 +34,21 @@ class NotificationManager: ObservableObject {
                     repeatIntervals: reminder.repeatSettings.repeatIntervals,
                     reminderID: reminderID,
                     soundType: soundType,
-                    caretakerAlertDelay: reminder.caretakerAlertDelay
+                    caretakerAlertDelay: reminder.caretakerAlertDelay,
+                    seniorName: seniorName
                 )
             }
             return
         }
         
         // Schedule initial batch for forever repeating alarms
-        scheduleNextBatch(reminder: reminder, reminderID: reminderID, startDate: reminder.date)
+        scheduleNextBatch(
+            reminder: reminder,
+            reminderID: reminderID,
+            startDate: reminder.date,
+            isCaretakerNotification: isCaretakerNotification,
+            seniorName: seniorName
+        )
     }
     
     private func stripSeconds(_ date: Date) -> Date {
@@ -45,10 +57,34 @@ class NotificationManager: ObservableObject {
         return calendar.date(from: comps)!
     }
     
-    private func scheduleNextBatch(reminder: ReminderData, reminderID: String, startDate: Date) {
+    private func scheduleNextBatch(
+        reminder: ReminderData,
+        reminderID: String,
+        startDate: Date,
+        isCaretakerNotification: Bool,
+        seniorName: String? = nil
+    ) {
         let content = UNMutableNotificationContent()
-        content.title = reminder.title
-        content.body = reminder.description
+
+        if isCaretakerNotification {
+            let senior = seniorName ?? "Senior"
+            content.title = "🚨 \(senior)'s Reminder"
+            content.body = "\"\(reminder.title)\" is not finished yet."
+            content.userInfo = [
+                "role": "caretaker",
+                "reminderID": reminderID,
+                "seniorName": senior,
+                "reminderTitle": reminder.title
+            ]
+        } else {
+            content.title = reminder.title
+            content.body = reminder.description
+            content.userInfo = [
+                "role": "senior",
+                "reminderID": reminderID
+            ]
+        }
+
         FirestoreManager().loadUserSettings(field: "selectedSound") { soundValue in
             let soundType = (soundValue as? String) ?? "Chord"
             let soundFileName: String
@@ -62,6 +98,10 @@ class NotificationManager: ObservableObject {
                 soundFileName = "marimba1.wav"
             case "marimba 2":
                 soundFileName = "marimba2.wav"
+            case "chime":
+                soundFileName = "chime.wav"
+            case "pulse":
+                soundFileName = "pulse.wav"
             default:
                 soundFileName = "chord_iphone.WAV"
             }
@@ -91,17 +131,31 @@ class NotificationManager: ObservableObject {
             //print("Triggers to schedule for 'forever' reminder \(reminderID): \(scheduledDates)")
             // Schedule notifications
             for (index, date) in scheduledDates.enumerated() {
-                let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+                let mainDate = isCaretakerNotification
+                    ? date.addingTimeInterval(reminder.caretakerAlertDelay)
+                    : date
+
+                let comps = calendar.dateComponents(
+                    [.year, .month, .day, .hour, .minute],
+                    from: mainDate
+                )
                 let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-                let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)"
+                let role = isCaretakerNotification ? "caretaker" : "senior"
+                let identifier =
+                    "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)-\(role)"
                 
                 // Add custom data to reschedule next batch
                 if index == self.maxScheduledNotifications - 1 {
-                    content.userInfo = [
+                    var lastBatchUserInfo: [String: Any] = [
                         "isLastInBatch": true,
                         "reminderID": reminderID,
-                        "nextStartDate": currentDate.timeIntervalSince1970
+                        "nextStartDate": currentDate.timeIntervalSince1970,
+                        "role": role
                     ]
+                    if let seniorName = seniorName, isCaretakerNotification {
+                        lastBatchUserInfo["seniorName"] = seniorName
+                    }
+                    content.userInfo = lastBatchUserInfo
                 }
                 
                 let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
@@ -109,49 +163,44 @@ class NotificationManager: ObservableObject {
                     if let error = error {
                         print("Error scheduling main notification: \(error)")
                     } else {
-                        //print("Scheduled main notification for forever alarm: \(identifier) at \(date)")
+                        //print("Scheduled main notification for forever alarm: \(identifier) at \(mainDate)")
                     }
                 }
                 
-                // Schedule follow-up notification for forever alarms
-                let halfDelaySeconds = reminder.caretakerAlertDelay / 2
-                let followUpDate = date.addingTimeInterval(halfDelaySeconds)
+                // Only schedule follow-up notifications for seniors
+                if !isCaretakerNotification {
+                    // Schedule follow-up notification for forever alarms
+                    let halfDelaySeconds = reminder.caretakerAlertDelay / 2
+                    let followUpDate = date.addingTimeInterval(halfDelaySeconds)
 
-                // Build follow-up content
-                let followUpContent = UNMutableNotificationContent()
-                followUpContent.title = "Reminder: \(reminder.title)"
-                followUpContent.body = "Make sure to mark ‘\(reminder.title)’ as done! Caretaker alert in \(Int((reminder.caretakerAlertDelay/2)/60)) min."
-                followUpContent.sound = content.sound
-                followUpContent.userInfo = [
-                    "isFollowUp": true,
-                    "reminderID": reminderID
-                ]
+                    // Build follow-up content
+                    let followUpContent = UNMutableNotificationContent()
+                    followUpContent.title = "Reminder: \(reminder.title)"
+                    followUpContent.body = "Make sure to mark ‘\(reminder.title)’ as done! Caretaker alert in \(Int((reminder.caretakerAlertDelay/2)/60)) min."
+                    followUpContent.sound = content.sound
+                    followUpContent.userInfo = [
+                        "isFollowUp": true,
+                        "reminderID": reminderID,
+                        "role": "senior"
+                    ]
 
-                // Trigger
-                let timeInterval = followUpDate.timeIntervalSinceNow
-                if timeInterval > 0 {
-                    let followUpTrigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
+                    // Trigger
+                    let timeInterval = followUpDate.timeIntervalSinceNow
+                    if timeInterval > 0 {
+                        let followUpTrigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
 
-                    // Unique identifier (parallel to normal follow-up IDs)
-                    let followUpIdentifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-followup-\(index)"
+                        // Unique identifier (parallel to normal follow-up IDs)
+                        let followUpIdentifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-followup-\(index)-senior"
 
-                    let followUpRequest = UNNotificationRequest(identifier: followUpIdentifier, content: followUpContent, trigger: followUpTrigger)
+                        let followUpRequest = UNNotificationRequest(identifier: followUpIdentifier, content: followUpContent, trigger: followUpTrigger)
 
-                    UNUserNotificationCenter.current().add(followUpRequest) //{ error in
-    //                    if let error = error {
-    //                        print("Error scheduling follow-up notification: \(error)")
-    //                    } else {
-    //                        print("Scheduled follow-up notifications for forever alarm: \(followUpIdentifier) at \(followUpDate)")
-    //                    }
-    //                }
-                } else {
-                    print("Skipped follow-up notification for \(reminderID) because interval is \(timeInterval) seconds")
+                        UNUserNotificationCenter.current().add(followUpRequest)
+                    } else {
+                        print("Skipped follow-up notification for \(reminderID) because interval is \(timeInterval) seconds")
+                    }
                 }
-                
             }
         }
-        
-        
     }
     
     private func getNextOccurrence(from date: Date, repeatType: String, repeatIntervals: CustomRepeatType?) -> Date {
@@ -185,7 +234,10 @@ class NotificationManager: ObservableObject {
            let nextStartTimestamp = userInfo["nextStartDate"] as? TimeInterval {
             
             let nextStartDate = Date(timeIntervalSince1970: nextStartTimestamp)
-            
+            // Determine role for the next batch
+            let role = userInfo["role"] as? String ?? "senior"
+            let isCaretakerNotification = (role == "caretaker")
+            let seniorName = userInfo["seniorName"] as? String
             // Fetch reminder data and schedule next batch
             FirestoreManager().getReminder(dateCreated: reminderID) { document in
                 if let document = document,
@@ -202,7 +254,13 @@ class NotificationManager: ObservableObject {
                         }
                     }
                     
-                    self.scheduleNextBatch(reminder: reminder, reminderID: reminderID, startDate: nextStartDate)
+                    self.scheduleNextBatch(
+                        reminder: reminder,
+                        reminderID: reminderID,
+                        startDate: nextStartDate,
+                        isCaretakerNotification: isCaretakerNotification,
+                        seniorName: seniorName
+                    )
                 }
             }
         }
@@ -299,7 +357,12 @@ class NotificationManager: ObservableObject {
                     repeatIntervals: reminder.repeatSettings.repeatIntervals
                 )
                 
-                self.scheduleNextBatch(reminder: reminder, reminderID: reminderID, startDate: nextDate)
+                self.scheduleNextBatch(
+                    reminder: reminder,
+                    reminderID: reminderID,
+                    startDate: nextDate,
+                    isCaretakerNotification: false
+                )
             }
         }
     }
@@ -309,16 +372,15 @@ class NotificationManager: ObservableObject {
         
         var identifiersToCancel: [String] = []
         for i in 0..<maxScheduledNotifications {
-            identifiersToCancel.append("\(baseIdentifier)-\(i)")
+            identifiersToCancel.append("\(baseIdentifier)-\(i)-senior")
+            identifiersToCancel.append("\(baseIdentifier)-\(i)-caretaker")
+            identifiersToCancel.append("\(baseIdentifier)-followup-\(i)")
+            identifiersToCancel.append("\(baseIdentifier)-followup-\(i)-senior")
         }
         
-        // Cancel follow-up notifications
-        for i in 0..<maxScheduledNotifications {
-            identifiersToCancel.append("\(baseIdentifier)-followup-\(i)")
-        }
         
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
-        print("Cancelled ALL 'forever' notifications (main + follow-up) with base ID: \(baseIdentifier)")
+        print("Cancelled ALL 'forever' notifications (senior: main + follow-up, caretaker) with base ID: \(baseIdentifier)")
 
     }
 }

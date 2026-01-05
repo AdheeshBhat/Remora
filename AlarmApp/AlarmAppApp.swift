@@ -2,36 +2,50 @@
 //  AlarmAppApp.swift
 //  AlarmApp
 //
-//  Created by Adheesh Bhat on 4/21/25.
-//
 
 import SwiftUI
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseAuth
 import UserNotifications
 
 @main
 struct AlarmAppApp: App {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject var appearance = AppearanceModel()
-    
+    @StateObject private var appearance: AppearanceModel
+    @State private var authHandle: AuthStateDidChangeListenerHandle?
+
     init() {
         FirebaseApp.configure()
-        setupNotificationDelegate()
         
-//        let loader = FirestoreManager()
-//        appearance.loadFromFirebase(firestoreManager: loader)
+
+        // ✅ Create the model FIRST
+        let appearanceModel = AppearanceModel()
+        _appearance = StateObject(wrappedValue: appearanceModel)
+        
+        setupNotificationDelegate()
+
+        // ✅ Use the model directly (NOT self)
+        authHandle = Auth.auth().addStateDidChangeListener { _, user in
+            if user != nil {
+                let loader = FirestoreManager()
+                appearanceModel.loadFromFirebase(firestoreManager: loader)
+            } else {
+                DispatchQueue.main.async {
+                    appearanceModel.useLightMode = true
+                    appearanceModel.defaultToCalendarView = false
+                }
+            }
+        }
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appearance)
-                .task {
-                    let loader = FirestoreManager()
-                    appearance.loadFromFirebase(firestoreManager: loader)
-                }
-                .preferredColorScheme(appearance.useLightMode ? .light : .dark)
+                .preferredColorScheme(
+                    appearance.useLightMode ? .light : .dark
+                )
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
@@ -39,26 +53,29 @@ struct AlarmAppApp: App {
             }
         }
     }
-    
+
     private func setupNotificationDelegate() {
         UNUserNotificationCenter.current().delegate = AppNotificationDelegate.shared
     }
 }
 
-class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+final class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = AppNotificationDelegate()
-    
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                willPresent notification: UNNotification,
-                                withCompletionHandler completionHandler:
-                                @escaping (UNNotificationPresentationOptions) -> Void) {
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler:
+        @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
         completionHandler([.banner, .sound, .badge])
     }
-    
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                didReceive response: UNNotificationResponse,
-                                withCompletionHandler completionHandler:
-                                @escaping () -> Void) {
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
         NotificationManager.shared.handleNotificationResponse(response: response)
         completionHandler()
     }

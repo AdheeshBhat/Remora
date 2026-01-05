@@ -20,9 +20,9 @@ func requestNotificationPermission() {
 }
 
 
-func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String, caretakerAlertDelay: TimeInterval) {
+func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String, caretakerAlertDelay: TimeInterval, forUIDs: [String]? = nil, isCaretakerNotification: Bool = false, seniorName: String? = nil) {
     print("setAlarm called for reminderID: \(reminderID), repeat_type: \(repeat_type), repeat_until_date: \(repeat_until_date), date: \(dateAndTime)")
-
+    
     // Handle forever repeating alarms with NotificationManager
     if repeat_until_date == "Forever" && repeat_type != "None" {
         let reminder = ReminderData(
@@ -41,13 +41,30 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
             isLocked: false,
             caretakerAlertDelay: caretakerAlertDelay
         )
-        NotificationManager.shared.scheduleForeverRepeatingAlarm(reminder: reminder, reminderID: reminderID)
+        NotificationManager.shared.scheduleForeverRepeatingAlarm(reminder: reminder, reminderID: reminderID, isCaretakerNotification: isCaretakerNotification, seniorName: seniorName)
         return
     }
     
     let content = UNMutableNotificationContent()
-    content.title = title
-    content.body = description
+
+    if isCaretakerNotification {
+        
+        content.title = "🚨 \(seniorName ?? "Senior")'s Reminder"
+        content.body = "\"\(title)\" is not finished yet."
+        content.userInfo = [
+            "role": "caretaker",
+            "reminderID": reminderID,
+            "seniorName": seniorName ?? "",
+            "reminderTitle": title
+        ]
+    } else {
+        content.title = title
+        content.body = description
+        content.userInfo = [
+            "role": "senior",
+            "reminderID": reminderID
+        ]
+    }
 //    content.sound = soundType == "Alert"
 //        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
 //        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
@@ -62,6 +79,10 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         content.sound = UNNotificationSound(named: UNNotificationSoundName("marimba1.wav"))
     } else if soundType == "Marimba 2" {
         content.sound = UNNotificationSound(named: UNNotificationSoundName("marimba2.wav"))
+    } else if soundType == "Chime" {
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("chime.wav"))
+    } else if soundType == "Pulse" {
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("pulse.wav"))
     } else {
         content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
     }
@@ -151,9 +172,11 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
     // Schedule notifications
     print("Triggers to schedule for reminder \(reminderID): \(triggers)")
     for (index, triggerDate) in triggers.enumerated() {
-        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate)
+        let mainTriggerDate = isCaretakerNotification ? triggerDate.addingTimeInterval(caretakerAlertDelay) : triggerDate
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: mainTriggerDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-        let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)"
+        let role = isCaretakerNotification ? "caretaker" : "senior"
+        let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)-\(role)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
@@ -162,38 +185,42 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
                 print("Scheduled notification \(identifier) for \(triggerDate)")
             }
         }
+        
         //
         // Schedule follow-up reminder for senior if task is not marked complete
-        //
-        let halfDelaySeconds = caretakerAlertDelay / 2
-        let followUpDate = triggerDate.addingTimeInterval(halfDelaySeconds)
+        if !isCaretakerNotification {
+            let halfDelaySeconds = caretakerAlertDelay / 2
+            let followUpDate = triggerDate.addingTimeInterval(halfDelaySeconds)
 
-        // Use a different content object for follow-up
-        let followUpContent = UNMutableNotificationContent()
-        followUpContent.title = "Reminder: \(title)"
-        followUpContent.body = "Make sure to mark ‘\(title)’ as done! Caretaker alert in \(Int((caretakerAlertDelay/2)/60)) min."
-        followUpContent.sound = content.sound
-        followUpContent.userInfo = [
-            "isFollowUp": true,
-            "reminderID": reminderID
-        ]
-        let timeInterval = followUpDate.timeIntervalSinceNow
-        if timeInterval > 0 {
-            let followUpTrigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
-            let followUpIdentifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-followup-\(index)"
-            
-            let followUpRequest = UNNotificationRequest(identifier: followUpIdentifier, content: followUpContent, trigger: followUpTrigger)
-            
-            UNUserNotificationCenter.current().add(followUpRequest) { error in
-                if let error = error {
-                    print("Error scheduling follow-up notification: \(error)")
-                } else {
-                    print("Scheduled follow-up notification \(followUpIdentifier) for \(followUpDate)")
+            // Use a different content object for follow-up
+            let followUpContent = UNMutableNotificationContent()
+            followUpContent.title = "Reminder: \(title)"
+            followUpContent.body = "Make sure to mark ‘\(title)’ as done! Caretaker alert in \(Int((caretakerAlertDelay/2)/60)) min."
+            followUpContent.sound = content.sound
+            followUpContent.userInfo = [
+                "isFollowUp": true,
+                "reminderID": reminderID
+            ]
+            let timeInterval = followUpDate.timeIntervalSinceNow
+            if timeInterval > 0 {
+                let followUpTrigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
+                let followUpIdentifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-followup-\(index)"
+                
+                let followUpRequest = UNNotificationRequest(identifier: followUpIdentifier, content: followUpContent, trigger: followUpTrigger)
+                
+                UNUserNotificationCenter.current().add(followUpRequest) { error in
+                    if let error = error {
+                        print("Error scheduling follow-up notification: \(error)")
+                    } else {
+                        print("Scheduled follow-up notification \(followUpIdentifier) for \(followUpDate)")
+                    }
                 }
+            } else {
+                print("Skipped scheduling follow-up notification for \(reminderID) because the interval is \(timeInterval) seconds (non-positive)")
             }
-        } else {
-            print("Skipped scheduling follow-up notification for \(reminderID) because the interval is \(timeInterval) seconds (non-positive)")
         }
+        
+        
     }
 }
 
@@ -255,16 +282,18 @@ func cancelAlarm(reminderID: String) {
     // Cancel main notifications
     identifiersToCancel.append(baseIdentifier)
     for i in 0..<100 {
-        identifiersToCancel.append("\(baseIdentifier)-\(i)")
+        identifiersToCancel.append("\(baseIdentifier)-\(i)-senior")
+        identifiersToCancel.append("\(baseIdentifier)-\(i)-caretaker")
     }
     
     // Cancel follow-up notifications
     for i in 0..<100 {
         identifiersToCancel.append("\(baseIdentifier)-followup-\(i)")
+        identifiersToCancel.append("\(baseIdentifier)-followup-\(i)-senior")
     }
     
     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
-    print("Cancelled ALL notifications (main + follow-up) with base ID: \(baseIdentifier)")
+    print("Cancelled ALL notifications (senior: main + follow-up, caretaker) with base ID: \(baseIdentifier)")
 }
 
 func cancelSingleAlarmInstance(reminderID: String, instanceIndex: Int) {
@@ -272,12 +301,23 @@ func cancelSingleAlarmInstance(reminderID: String, instanceIndex: Int) {
         date: createExactDateFromString(dateString: reminderID)
     )
 
-    let mainIdentifier = "\(baseIdentifier)-\(instanceIndex)"
-    let followUpIdentifier = "\(baseIdentifier)-followup-\(instanceIndex)"
+    let identifiers = [
+        "\(baseIdentifier)-\(instanceIndex)-senior",
+        "\(baseIdentifier)-\(instanceIndex)-caretaker",
+        "\(baseIdentifier)-followup-\(instanceIndex)",
+        "\(baseIdentifier)-followup-\(instanceIndex)-senior"
+    ]
+    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
 
-    UNUserNotificationCenter.current().removePendingNotificationRequests(
-        withIdentifiers: [mainIdentifier, followUpIdentifier]
-    )
+    print("Cancelled single alarm instance: \(instanceIndex) and follow-up for senior + caretaker")
+}
 
-    print("Cancelled single alarm instance: \(mainIdentifier) and follow-up")
+
+func cancelAllNotificationsForCurrentUser() {
+    let center = UNUserNotificationCenter.current()
+
+    center.removeAllPendingNotificationRequests()
+    center.removeAllDeliveredNotifications()
+
+    print("🔕 All notifications cancelled for current user")
 }

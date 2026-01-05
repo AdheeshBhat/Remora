@@ -21,122 +21,129 @@ struct LoginScreen: View {
     
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack {
-                    VStack() {
-                        Image("Remura Logo")
-                            .resizable()
-                            .scaledToFit()
-                        //.frame(width: 500, height: 500)
-                        //.font(.system(size: 80))
-                        
-//                        Text("Reminders made easy for seniors & caregivers")
-//                            .font(.title2)
-//                            .foregroundColor(.primary)
-//                            .multilineTextAlignment(.center)
-//                            .padding(.horizontal)
-                    }
-                    //.padding(.bottom, 20)
+        ZStack {
+            Color(.systemBackground)
+                .edgesIgnoringSafeArea(.all)
+            NavigationStack {
+                ScrollView {
+                    VStack {
+                        VStack() {
+                            Image("Remura Logo")
+                                .resizable()
+                                .scaledToFit()
+                            //.frame(width: 500, height: 500)
+                            //.font(.system(size: 80))
+                            
+    //                        Text("Reminders made easy for seniors & caregivers")
+    //                            .font(.title2)
+    //                            .foregroundColor(.primary)
+    //                            .multilineTextAlignment(.center)
+    //                            .padding(.horizontal)
+                        }
+                        //.padding(.bottom, 20)
 
-                    // Login Form
-                    VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Email")
-                                .font(.title3)
-                                .fontWeight(.medium)
-                                .foregroundColor(.primary)
+                        // Login Form
+                        VStack(spacing: 20) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Email")
+                                    .font(.title3)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                                
+                                TextField("Enter your email", text: $email)
+                                    .font(.title3)
+                                    .autocapitalization(.none)
+                                    .padding(16)
+                                    .background(Color(.systemBackground))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.blue.opacity(0.4), lineWidth: 2)
+                                    )
+                                    .textContentType(.emailAddress)
+                                    .keyboardType(.emailAddress)
+                            }
                             
-                            TextField("Enter your email", text: $email)
-                                .font(.title3)
-                                .autocapitalization(.none)
-                                .padding(16)
-                                .background(Color(.systemBackground))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.blue.opacity(0.4), lineWidth: 2)
-                                )
-                                .textContentType(.emailAddress)
-                                .keyboardType(.emailAddress)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Password")
-                                .font(.title3)
-                                .fontWeight(.medium)
-                                .foregroundColor(.primary)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Password")
+                                    .font(.title3)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                                
+                                SecureField("Enter your password", text: $password)
+                                    .font(.title3)
+                                    .padding(16)
+                                    .background(Color(.systemBackground))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.blue.opacity(0.4), lineWidth: 2)
+                                    )
+                                    .textContentType(.password)
+                            }
                             
-                            SecureField("Enter your password", text: $password)
-                                .font(.title3)
-                                .padding(16)
-                                .background(Color(.systemBackground))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.blue.opacity(0.4), lineWidth: 2)
-                                )
-                                .textContentType(.password)
+                            if !errorMessage.isEmpty {
+                                Text(errorMessage)
+                                    .font(.title3)
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal)
+                                    .multilineTextAlignment(.center)
+                            }
                         }
+                        .padding(.horizontal, 24)
                         
-                        if !errorMessage.isEmpty {
-                            Text(errorMessage)
-                                .font(.title3)
-                                .foregroundColor(.red)
-                                .padding(.horizontal)
-                                .multilineTextAlignment(.center)
+                        // Buttons
+                        VStack(spacing: 16) {
+                            Button(action: {
+                                login()
+                            }) {
+                                Text("Sign In")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(18)
+                                    .background(Color.green)
+                                    .cornerRadius(12)
+                            }
+                            
+                            Button(action: {
+                                showRegistration.toggle()
+                            }) {
+                                Text("Create New Account")
+                                    .font(.title3)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.blue)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(16)
+                                    .background(Color.blue.opacity(0.15))
+                                    .cornerRadius(12)
+                            }
                         }
-                    }
-                    .padding(.horizontal, 24)
-                    
-                    // Buttons
-                    VStack(spacing: 16) {
-                        Button(action: {
-                            login()
-                        }) {
-                            Text("Sign In")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(18)
-                                .background(Color.green)
-                                .cornerRadius(12)
-                        }
+                        .padding(.horizontal, 24)
                         
-                        Button(action: {
-                            showRegistration.toggle()
-                        }) {
-                            Text("Create New Account")
-                                .font(.title3)
-                                .fontWeight(.medium)
-                                .foregroundColor(.blue)
-                                .frame(maxWidth: .infinity)
-                                .padding(16)
-                                .background(Color.blue.opacity(0.15))
-                                .cornerRadius(12)
-                        }
+                        Spacer(minLength: 40)
                     }
-                    .padding(.horizontal, 24)
-                    
-                    Spacer(minLength: 40)
+                }
+                .background(Color(.systemBackground))
+                .navigationDestination(isPresented: $navigateToHome) {
+                    HomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                        .environmentObject(appearance)
+                }
+                .navigationDestination(isPresented: $navigateToCaretakerHome) {
+                    CaretakerHomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                        .environmentObject(appearance)
+
+                }
+                .navigationDestination(isPresented: $showRegistration) {
+                    RegistrationScreen(cur_screen: $cur_screen)
+                        .environmentObject(appearance)
+
                 }
             }
-            .background(Color(.systemBackground))
-            .navigationDestination(isPresented: $navigateToHome) {
-                HomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
-                    .environmentObject(appearance)
-            }
-            .navigationDestination(isPresented: $navigateToCaretakerHome) {
-                CaretakerHomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
-                    .environmentObject(appearance)
-
-            }
-            .navigationDestination(isPresented: $showRegistration) {
-                RegistrationScreen(cur_screen: $cur_screen)
-                    .environmentObject(appearance)
-
-            }
         }
+        .preferredColorScheme(appearance.useLightMode ? .light : .dark)
+            
     }
+    
 
     private func login() {
         errorMessage = ""
@@ -146,6 +153,10 @@ struct LoginScreen: View {
                 errorMessage = error.localizedDescription
             } else {
                 errorMessage = ""
+
+                // Ensure username -> UID mapping exists (fixes old accounts)
+                firestoreManager.ensureUsernameMappingExists()
+
                 // Navigate to HomeScreen
                 cur_screen = .HomeScreen
                 firestoreManager.checkIfCaretaker { isCaretaker in
@@ -298,6 +309,9 @@ struct RegistrationScreen: View {
                                         print("Username mapping saved successfully")
                                     }
                                 }
+                                
+                                // Ensure username -> UID mapping exists (fixes old accounts)
+                                firestoreManager.ensureUsernameMappingExists()
                                 
                                 // Navigate to appropriate HomeScreen
                                 cur_screen = .HomeScreen

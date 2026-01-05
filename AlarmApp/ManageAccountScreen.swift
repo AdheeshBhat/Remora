@@ -12,6 +12,7 @@ struct ManageAccountScreen: View {
     let firestoreManager: FirestoreManager
     @State private var showDeleteAlert = false
     @Environment(\.presentationMode) private var presentationMode
+    @EnvironmentObject var appearance: AppearanceModel
     
     var body: some View {
         VStack(spacing: 20) {
@@ -37,12 +38,13 @@ struct ManageAccountScreen: View {
                         DispatchQueue.main.async {
                             switch result {
                             case .success:
+                                cancelAllNotificationsForCurrentUser()
                                 // Log out user after deletion
                                 do {
                                     try Auth.auth().signOut()
                                     if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                                        let window = windowScene.windows.first {
-                                        window.rootViewController = UIHostingController(rootView: ContentView())
+                                        window.rootViewController = UIHostingController(rootView: ContentView().environmentObject(appearance))
                                     }
                                 } catch {
                                     print("Error signing out: \(error.localizedDescription)")

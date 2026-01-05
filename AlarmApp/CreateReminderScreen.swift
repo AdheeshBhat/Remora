@@ -232,24 +232,72 @@ struct CreateReminderScreen: View {
                                 isLocked: isLocked,
                                 caretakerAlertDelay: caretakerAlertDelay
                             )
-                            //let uniqueID = Date.now 
+                            //let uniqueID = Date.now
                             let reminderID = getExactStringFromCurrentDate()
-                            firestoreManager.setReminder(reminderID: reminderID, reminder: reminder)
-                            presentationMode.wrappedValue.dismiss()
-                            firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                let soundType = (soundValue as? String) ?? "Chord"
-
-                                setAlarm(
-                                    dateAndTime: date,
-                                    title: title,
-                                    description: description,
-                                    repeat_type: reminder.repeatSettings.repeat_type,
-                                    repeat_until_date: reminder.repeatSettings.repeat_until_date,
-                                    repeatIntervals: reminder.repeatSettings.repeatIntervals,
-                                    reminderID: reminderID,
-                                    soundType: soundType,
-                                    caretakerAlertDelay: caretakerAlertDelay
-                                )
+                            let activeUID = firestoreManager.activeUserUID
+                            
+                            firestoreManager.checkIfCaretaker { isCaretaker in
+                                if isCaretaker {
+                                    // Caretaker creating reminder for a linked senior
+                                    firestoreManager.getLinkedSeniorUIDs { seniorUIDs in
+                                        firestoreManager.setReminder(
+                                            reminderID: reminderID,
+                                            reminder: reminder,
+                                            forUIDs: [activeUID]
+                                        )
+                                        // Only set the alarm for the senior, passing their name
+                                        firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                            let soundType = (soundValue as? String) ?? "Chord"
+                                            firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                                guard let seniorName = seniorName else { return }
+                                                setAlarm(
+                                                    dateAndTime: date,
+                                                    title: title,
+                                                    description: description,
+                                                    repeat_type: reminder.repeatSettings.repeat_type,
+                                                    repeat_until_date: reminder.repeatSettings.repeat_until_date,
+                                                    repeatIntervals: reminder.repeatSettings.repeatIntervals,
+                                                    reminderID: reminderID,
+                                                    soundType: soundType,
+                                                    caretakerAlertDelay: caretakerAlertDelay,
+                                                    isCaretakerNotification: true,
+                                                    seniorName: seniorName
+                                                )
+                                            }
+                                        }
+                                        
+                                    }
+                                } else {
+                                    // Senior creating reminder
+                                    firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                        firestoreManager.setReminder(
+                                            reminderID: reminderID,
+                                            reminder: reminder,
+                                            forUIDs: [activeUID]
+                                        )
+                                        firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                            let soundType = (soundValue as? String) ?? "Chord"
+                                            firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                                guard let seniorName = seniorName else { return }
+                                                setAlarm(
+                                                    dateAndTime: date,
+                                                    title: title,
+                                                    description: description,
+                                                    repeat_type: reminder.repeatSettings.repeat_type,
+                                                    repeat_until_date: reminder.repeatSettings.repeat_until_date,
+                                                    repeatIntervals: reminder.repeatSettings.repeatIntervals,
+                                                    reminderID: reminderID,
+                                                    soundType: soundType,
+                                                    caretakerAlertDelay: caretakerAlertDelay,
+                                                    isCaretakerNotification: false,
+                                                    seniorName: seniorName
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                presentationMode.wrappedValue.dismiss()
                             }
                         }
                     }) {
