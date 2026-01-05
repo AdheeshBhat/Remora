@@ -112,6 +112,7 @@ struct MonthYearSelector: View {
                     .padding(.leading)
                 Text(currentPeriodText)
                     .font(.title)
+                    .fontWeight(.semibold)
                     .foregroundColor(.primary)
                     .onTapGesture {
                         isEditingMonthYear = true

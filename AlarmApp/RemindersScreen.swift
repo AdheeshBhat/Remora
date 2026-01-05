@@ -94,19 +94,67 @@ struct RemindersScreen: View {
 
     // MARK: - Subviews split for type-checking
     private var header: some View {
-        ZStack {
-            HStack {
-                SettingsExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
-                Spacer()
-            }
-            Text("Reminders")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-                .frame(maxWidth: .infinity, alignment: .center)
-            HStack {
-                Spacer()
-                CreateReminderExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+        VStack(spacing: 8) {
+            if firestoreManager.isCaretakerViewingSenior {
+                // Caretaker view: back button + title + create reminder button
+                VStack(spacing: 4) {
+                    HStack {
+                        // BACK TO SENIORS BUTTON
+                        NavigationLink(
+                            destination: CaretakerHomeView(
+                                cur_screen: $cur_screen,
+                                firestoreManager: firestoreManager
+                            )
+                        ) {
+                            HStack {
+                                Image(systemName: "arrow.left")
+                                Text("Back to Seniors")
+                                    .fontWeight(.semibold)
+                            }
+                            .padding(8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        .simultaneousGesture(TapGesture().onEnded {
+                            cur_screen = .CaretakerHomeScreen
+                            firestoreManager.isCaretakerViewingSenior = false
+                        })
+
+                        Spacer()
+
+                        // CREATE REMINDER BUTTON
+                        CreateReminderExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                    }
+
+                    // Title below buttons
+                    RemindersScreenTitle(
+                        firestoreManager: firestoreManager,
+                        uidToDisplay: firestoreManager.currentUID ?? firestoreManager.activeUserUID
+                    )
+                }
+            } else {
+                // Senior view: everything on the same HStack
+                ZStack {
+                    HStack {
+                        // SETTINGS BUTTON
+                        SettingsExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                        Spacer()
+                    }
+                        
+                    // TITLE
+                    Text("Reminders")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+ 
+                    HStack {
+                        Spacer()
+                        // CREATE REMINDER BUTTON
+                        CreateReminderExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                    }
+                }
+                
             }
         }
         .padding(.horizontal)
@@ -166,9 +214,12 @@ struct RemindersScreen: View {
                             swipeOffset = 0
                         }
                     )
+//                    .font(.title2)
+//                    .fontWeight(.semibold)
+//                    .foregroundColor(.primary)
                 } else {
                     Text(currentPeriodText)
-                        .font(.title2)
+                        .font(.title)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
                 }

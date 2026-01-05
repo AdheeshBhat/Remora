@@ -185,6 +185,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
                 print("Scheduled notification \(identifier) for \(triggerDate)")
             }
         }
+        
         //
         // Schedule follow-up reminder for senior if task is not marked complete
         if !isCaretakerNotification {

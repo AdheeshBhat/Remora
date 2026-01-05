@@ -280,37 +280,76 @@ struct CalendarView: View {
             ) { EmptyView() }
             .hidden()
             // MARK: Header
-            ZStack {
-                HStack {
-                    SettingsExperience(
-                        cur_screen: $cur_screen,
-                        firestoreManager: firestoreManager
-                    )
-                    Spacer()
-                }
+            Group {
+                if firestoreManager.isCaretakerViewingSenior {
+                    VStack(spacing: 4) {
+                        HStack {
+                            // Back button
+                            NavigationLink(
+                                destination: CaretakerHomeView(
+                                    cur_screen: $cur_screen,
+                                    firestoreManager: firestoreManager
+                                )
+                            ) {
+                                HStack {
+                                    Image(systemName: "arrow.left")
+                                    Text("Back to Seniors")
+                                        .fontWeight(.semibold)
+                                }
+                                .padding(8)
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(8)
+                            }
+                            .simultaneousGesture(TapGesture().onEnded {
+                                cur_screen = .CaretakerHomeScreen
+                                firestoreManager.isCaretakerViewingSenior = false
+                            })
+                            Spacer()
+                            CreateReminderExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                        }
+                        .padding(.horizontal)
+                        // Title below HStack
+                        CalendarScreenTitle(
+                            firestoreManager: firestoreManager,
+                            uidToDisplay: firestoreManager.currentUID ?? firestoreManager.activeUserUID
+                        )
+                    }
+                    .padding(.bottom)
+                } else {
+                    // Senior logged in: settings, title, create reminder in one HStack
+                    ZStack {
+                        HStack {
+                            SettingsExperience(
+                                cur_screen: $cur_screen,
+                                firestoreManager: firestoreManager
+                            )
+                            Spacer()
+                        }
 
-                Text("Calendar")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top)
+                        Text("Calendar")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top)
 
-                HStack {
-                    Spacer()
-                    CreateReminderExperience(
-                        cur_screen: $cur_screen,
-                        firestoreManager: firestoreManager
-                    )
+                        HStack {
+                            Spacer()
+                            CreateReminderExperience(
+                                cur_screen: $cur_screen,
+                                firestoreManager: firestoreManager
+                            )
+                        }
+                    }
+                    .padding(.bottom)
                 }
             }
-            .padding(.bottom)
 
             // MARK: Week/Month Toggle
             HStack(spacing: 4) {
                 Button(action: { calendarViewType = "week" }) {
                     Text("Week")
-                        .font(.headline)
-                        .fontWeight(.medium)
+                        .font(.title3)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(calendarViewType == "week" ? Color.blue : Color.blue.opacity(0.1))
@@ -319,19 +358,19 @@ struct CalendarView: View {
                 }
                 Button(action: { calendarViewType = "month" }) {
                     Text("Month")
-                        .font(.headline)
-                        .fontWeight(.medium)
+                        .font(.title3)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .padding(.vertical, 12)
                         .background(calendarViewType == "month" ? Color.blue : Color.blue.opacity(0.1))
                         .foregroundColor(calendarViewType == "month" ? .white : .blue)
-                        .cornerRadius(12)
+                        .cornerRadius(8)
                 }
             }
             .padding(.horizontal)
 
             // MARK: Month/Year Selector
-            VStack(spacing: 4) {
+            VStack(spacing: 8) {
                 if calendarViewType == "month" {
                     MonthYearSelector(
                         filteredDay: $monthFilteredDay,
@@ -362,6 +401,7 @@ struct CalendarView: View {
                 } else {
                     Text(currentPeriodText)
                         .font(.title)
+                        .fontWeight(.semibold)
                         .foregroundColor(.primary)
                 }
 
