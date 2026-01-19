@@ -156,6 +156,11 @@ struct LoginScreen: View {
 
                 // Ensure username -> UID mapping exists (fixes old accounts)
                 firestoreManager.ensureUsernameMappingExists()
+                
+                // Store FCM token for push notifications
+                if let uid = authResult?.user.uid {
+                    PushNotificationManager.shared.storeFCMToken(for: uid)
+                }
 
                 // Navigate to HomeScreen
                 cur_screen = .HomeScreen
@@ -309,6 +314,9 @@ struct RegistrationScreen: View {
                                         print("Username mapping saved successfully")
                                     }
                                 }
+                                
+                                // Store FCM token for push notifications
+                                PushNotificationManager.shared.storeFCMToken(for: user.uid)
                                 
                                 // Ensure username -> UID mapping exists (fixes old accounts)
                                 firestoreManager.ensureUsernameMappingExists()
