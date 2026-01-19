@@ -722,4 +722,48 @@ class FirestoreManager: ObservableObject {
             }
     }
     
+    // MARK: FCM Token Management
+    func storeFCMToken(token: String, for userUID: String) {
+        db.collection("users").document(userUID).updateData([
+            "fcmToken": token,
+            "tokenUpdatedAt": FieldValue.serverTimestamp()
+        ]) { error in
+            if let error = error {
+                print("Error storing FCM token: \(error)")
+            } else {
+                print("FCM token stored successfully for user: \(userUID)")
+            }
+        }
+    }
+    
+    func getFCMToken(for userUID: String, completion: @escaping (String?) -> Void) {
+        db.collection("users").document(userUID).getDocument { document, error in
+            if let document = document, document.exists {
+                let token = document.data()?["fcmToken"] as? String
+                completion(token)
+            } else {
+                completion(nil)
+            }
+        }
+    }
+    
+    func getFCMTokensForUsers(userUIDs: [String], completion: @escaping ([String: String]) -> Void) {
+        var tokens: [String: String] = [:]
+        let dispatchGroup = DispatchGroup()
+        
+        for uid in userUIDs {
+            dispatchGroup.enter()
+            getFCMToken(for: uid) { token in
+                if let token = token {
+                    tokens[uid] = token
+                }
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .main) {
+            completion(tokens)
+        }
+    }
+    
 }
