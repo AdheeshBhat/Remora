@@ -2,7 +2,6 @@
 //  PushNotificationManager.swift
 //  AlarmApp
 //
-//  Created by AI Assistant
 //
 
 import Foundation
@@ -19,8 +18,6 @@ class PushNotificationManager: NSObject, ObservableObject {
     }
     
     func registerForPushNotifications() {
-        UNUserNotificationCenter.current().delegate = self
-        
         let authOptions: UNAuthorizationOptions = [.alert, .badge, .sound]
         UNUserNotificationCenter.current().requestAuthorization(options: authOptions) { granted, error in
             if granted {
@@ -49,24 +46,12 @@ extension PushNotificationManager: MessagingDelegate {
         guard let fcmToken = fcmToken else { return }
         print("Firebase registration token: \(fcmToken)")
         
-        // Store the token for the current user
         let currentUID = FirestoreManager().activeUserUID
         if !currentUID.isEmpty {
             FirestoreManager().storeFCMToken(token: fcmToken, for: currentUID)
         } else {
-            // Optionally log when there's no active user
             print("No active user UID found; skipping FCM token storage.")
         }
     }
 }
 
-extension PushNotificationManager: UNUserNotificationCenterDelegate {
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.alert, .badge, .sound])
-    }
-    
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        // Handle notification tap
-        completionHandler()
-    }
-}
