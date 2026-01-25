@@ -8,6 +8,7 @@
 import Foundation
 import FirebaseMessaging
 import UserNotifications
+import UIKit
 
 class PushNotificationManager: NSObject, ObservableObject {
     static let shared = PushNotificationManager()
@@ -49,8 +50,12 @@ extension PushNotificationManager: MessagingDelegate {
         print("Firebase registration token: \(fcmToken)")
         
         // Store the token for the current user
-        if let currentUID = FirestoreManager().activeUserUID {
+        let currentUID = FirestoreManager().activeUserUID
+        if !currentUID.isEmpty {
             FirestoreManager().storeFCMToken(token: fcmToken, for: currentUID)
+        } else {
+            // Optionally log when there's no active user
+            print("No active user UID found; skipping FCM token storage.")
         }
     }
 }

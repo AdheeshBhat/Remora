@@ -1,21 +1,6 @@
 import SwiftUI
 
 
-func filterReminders(userData: [String: ReminderData], period: String, filteredDay: Date?) -> [String: ReminderData] {
-    return userData.filter { (documentID, reminder) in
-        let reminderDate = reminder.date
-        let calendar = Calendar.current
-        
-        if period == "today" {
-            let today = filteredDay ?? Date()
-            let startOfDay = calendar.startOfDay(for: today)
-            let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: startOfDay)!
-            return reminderDate >= startOfDay && reminderDate <= endOfDay
-        }
-        return true
-    }
-}
-
 struct TodayRemindersExperience: View {
     @Binding var cur_screen: Screen
     var isHideCompletedReminders: Bool
@@ -46,10 +31,15 @@ struct TodayRemindersExperience: View {
 //                Spacer()
 //            } else {
                 Group {
-                    let filteredReminders = filterReminders(userData: reminders, period: "today", filteredDay: nil)
+                    let expandedTodayReminders = expandRepeatingReminders(
+                        userData: reminders,
+                        period: "today",
+                        filteredDay: Date()
+                    )
+
                     let visibleReminders = isHideCompletedReminders
-                    ? filteredReminders.filter { !$0.value.isComplete }
-                    : filteredReminders
+                        ? expandedTodayReminders.filter { !$0.value.isComplete }
+                        : expandedTodayReminders
                     
                     if visibleReminders.isEmpty {
                         Spacer()
@@ -71,7 +61,7 @@ struct TodayRemindersExperience: View {
                                         showDeleteButton: false,
                                         userID: 1,
                                         dateKey: reminder.date,
-                                        documentID: documentID,
+                                        documentID: documentID.components(separatedBy: "-")[0],
                                         firestoreManager: firestoreManager,
                                         onUpdate: {
                                             reloadReminders()

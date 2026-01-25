@@ -9,7 +9,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Binding var cur_screen: Screen
-    @State var isHideCompletedReminders: Bool = false
+    @AppStorage("hideCompletedReminders") var isHideCompletedReminders: Bool = false
     let firestoreManager: FirestoreManager
     @Environment(\.presentationMode) private var presentationMode
 

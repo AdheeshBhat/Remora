@@ -6,11 +6,8 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseFirestore
-<<<<<<< HEAD
 import FirebaseAuth
-=======
 import FirebaseMessaging
->>>>>>> 7199870 (push notifcations test)
 import UserNotifications
 
 @main
@@ -21,19 +18,15 @@ struct AlarmAppApp: App {
 
     init() {
         FirebaseApp.configure()
-<<<<<<< HEAD
-=======
-        setupNotificationDelegate()
-        setupPushNotifications()
->>>>>>> 7199870 (push notifcations test)
         
+    
 
         // ✅ Create the model FIRST
         let appearanceModel = AppearanceModel()
         _appearance = StateObject(wrappedValue: appearanceModel)
         
         setupNotificationDelegate()
-
+        setupPushNotifications()
         // ✅ Use the model directly (NOT self)
         authHandle = Auth.auth().addStateDidChangeListener { _, user in
             if user != nil {

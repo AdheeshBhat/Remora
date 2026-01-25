@@ -25,6 +25,7 @@ struct RemindersScreen: View {
     @State private var canResetDate: Bool = false
     @State var remindersForUser: [String: ReminderData]
     let firestoreManager: FirestoreManager
+    @AppStorage("hideCompletedReminders") private var isHideCompletedReminders: Bool = false
     
     //create a variable that would change the period depending on the button pressed
     var currentPeriodText: String {
@@ -214,14 +215,31 @@ struct RemindersScreen: View {
                             swipeOffset = 0
                         }
                     )
-//                    .font(.title2)
-//                    .fontWeight(.semibold)
-//                    .foregroundColor(.primary)
                 } else {
                     Text(currentPeriodText)
                         .font(.title)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
+                }
+                // Hide Completed chip
+                Button(action: {
+                    isHideCompletedReminders.toggle()
+                }) {
+                    HStack(spacing: 6) {
+                        if isHideCompletedReminders {
+                            Image(systemName: "checkmark.circle.fill")
+                        } else {
+                            Image(systemName: "circle")
+                        }
+                        Text("Hide Completed")
+                            .fontWeight(.semibold)
+                    }
+                    .font(.subheadline)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(isHideCompletedReminders ? Color.blue : Color.blue.opacity(0.1))
+                    .foregroundColor(isHideCompletedReminders ? .white : .blue)
+                    .cornerRadius(16)
                 }
                 if canResetDate == true {
                     if !isEditingMonthYear {
@@ -252,7 +270,17 @@ struct RemindersScreen: View {
                 ScrollView {
                     ScrollViewReader { proxy in
                         LazyVStack(spacing: 12) {
-                            // Filter the reminders for the current period and date
+                            // Filter the reminders for the current period and date, with hide completed applied
+                            let expandedReminders = expandRepeatingReminders(
+                                userData: remindersForUser,
+                                period: filterPeriod,
+                                filteredDay: calculateDateFor()
+                            )
+
+                            let visibleReminders = isHideCompletedReminders
+                                ? expandedReminders.filter { !$0.value.isComplete }
+                                : expandedReminders
+
                             let filteredReminders = formattedReminders(
                                 userID: 1,
                                 period: filterPeriod,
@@ -261,7 +289,7 @@ struct RemindersScreen: View {
                                 showDeleteButton: isDeleteViewOn,
                                 filteredDay: calculateDateFor(),
                                 firestoreManager: firestoreManager,
-                                userData: remindersForUser,
+                                userData: visibleReminders,
                                 onUpdate: loadReminders
                             )
                             if isRemindersEmpty(for: filterPeriod, filteredDay: calculateDateFor(), reminders: remindersForUser) {
@@ -294,8 +322,17 @@ struct RemindersScreen: View {
 
     // Helper to check if there are any reminders for the current filter period and date
     private func isRemindersEmpty(for period: String, filteredDay: Date, reminders: [String: ReminderData]) -> Bool {
-        let expandedReminders = expandRepeatingReminders(userData: reminders, period: period, filteredDay: filteredDay)
-        return expandedReminders.isEmpty
+        let expandedReminders = expandRepeatingReminders(
+            userData: reminders,
+            period: period,
+            filteredDay: filteredDay
+        )
+
+        let visibleReminders = isHideCompletedReminders
+            ? expandedReminders.filter { !$0.value.isComplete }
+            : expandedReminders
+
+        return visibleReminders.isEmpty
     }
     
 

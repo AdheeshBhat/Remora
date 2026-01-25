@@ -95,6 +95,7 @@ struct SettingsScreen: View {
             }
             saveSettingsButton
                 .padding(.bottom)
+                .padding(.top)
             navBar
         }
         .onAppear {

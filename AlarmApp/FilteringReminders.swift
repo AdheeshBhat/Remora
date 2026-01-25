@@ -173,15 +173,69 @@ func showIncompleteReminders(userID: Int, period: String, cur_screen: Binding<Sc
 
 //----------------------------------------------------------------- 3
 
+func dayHeader(from date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "EEEE, MMM d"
+    return formatter.string(from: date)
+}
+
+func weekHeader(from date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "MMM d"
+    let calendar = Calendar.current
+    let startOfWeek = calendar.date(
+        from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+    )!
+    return formatter.string(from: startOfWeek)
+}
 
 func formattedReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = true, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [String: ReminderData], onUpdate: (() -> Void)? = nil) -> some View {
-    
     let expandedReminders = expandRepeatingReminders(userData: userData, period: period, filteredDay: filteredDay)
     let sortedReminders = expandedReminders.sorted { $0.value.date < $1.value.date }
-    
-    return VStack {
-        ForEach(sortedReminders, id: \.key) { (documentID, reminder) in
-            HStack {
+
+    let calendar = Calendar.current
+
+    return VStack(alignment: .leading, spacing: 12) {
+        ForEach(Array(sortedReminders.enumerated()), id: \.element.key) { index, element in
+            let documentID = element.key
+            let reminder = element.value
+            let date = reminder.date
+
+            let previousReminder: ReminderData? =
+                index > 0 ? sortedReminders[index - 1].value : nil
+
+            let isNewDay =
+                previousReminder == nil ||
+                !calendar.isDate(
+                    date,
+                    inSameDayAs: previousReminder!.date
+                )
+
+            let isNewWeek =
+                previousReminder == nil ||
+                calendar.component(.weekOfYear, from: date) !=
+                calendar.component(.weekOfYear, from: previousReminder!.date)
+
+            VStack(alignment: .leading, spacing: 12) {
+
+                // WEEK → group by day
+                if period == "week" && isNewDay {
+                    Text(dayHeader(from: date))
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    Divider().opacity(0.4)
+                }
+
+                // MONTH → group by week
+                if period == "month" && isNewWeek {
+                    Text("Week of \(weekHeader(from: date))")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    Divider().opacity(0.4)
+                }
+
                 ReminderRow(
                     cur_screen: cur_screen,
                     title: getTitle(reminder: reminder),

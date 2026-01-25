@@ -178,6 +178,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         let role = isCaretakerNotification ? "caretaker" : "senior"
         let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)-\(role)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        //PushNotificationManager.shared.
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 print("Error adding notification: \(error)")
