@@ -105,19 +105,43 @@ struct AlarmAppApp: App {
                             customRepeat = CustomRepeatType(days: days)
                         }
                         
-                        FirestoreManager().loadUserSettings(field: "selectedSound") { soundValue in
-                            let soundType = (soundValue as? String) ?? "Chord"
-                            setAlarm(
-                                dateAndTime: timestamp.dateValue(),
-                                title: title,
-                                description: description,
-                                repeat_type: repeatType,
-                                repeat_until_date: repeatUntil,
-                                repeatIntervals: customRepeat,
-                                reminderID: documentID,
-                                soundType: soundType,
-                                caretakerAlertDelay: caretakerAlertDelay
-                            )
+                        FirestoreManager().checkIfCaretaker { isCaretaker in
+                            FirestoreManager().loadUserSettings(field: "selectedSound") { soundValue in
+                                let soundType = (soundValue as? String) ?? "Chord"
+
+                                if isCaretaker {
+                                    // 👇 CARETAKER DEVICE SCHEDULING
+                                    let seniorName = data["author"] as? String ?? "Senior"
+
+                                    setAlarm(
+                                        dateAndTime: timestamp.dateValue(),
+                                        title: title,
+                                        description: description,
+                                        repeat_type: repeatType,
+                                        repeat_until_date: repeatUntil,
+                                        repeatIntervals: customRepeat,
+                                        reminderID: documentID,
+                                        soundType: soundType,
+                                        caretakerAlertDelay: caretakerAlertDelay,
+                                        isCaretakerNotification: true,
+                                        seniorName: seniorName
+                                    )
+
+                                } else {
+                                    // 👇 SENIOR DEVICE SCHEDULING
+                                    setAlarm(
+                                        dateAndTime: timestamp.dateValue(),
+                                        title: title,
+                                        description: description,
+                                        repeat_type: repeatType,
+                                        repeat_until_date: repeatUntil,
+                                        repeatIntervals: customRepeat,
+                                        reminderID: documentID,
+                                        soundType: soundType,
+                                        caretakerAlertDelay: caretakerAlertDelay
+                                    )
+                                }
+                            }
                         }
                     }
                 }
