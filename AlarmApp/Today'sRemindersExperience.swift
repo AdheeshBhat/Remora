@@ -34,7 +34,8 @@ struct TodayRemindersExperience: View {
                     let expandedTodayReminders = expandRepeatingReminders(
                         userData: reminders,
                         period: "today",
-                        filteredDay: Date()
+                        filteredDay: Date(),
+                        hideCompleted: isHideCompletedReminders
                     )
 
                     let visibleReminders = isHideCompletedReminders

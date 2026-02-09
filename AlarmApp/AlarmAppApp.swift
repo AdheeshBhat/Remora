@@ -12,9 +12,13 @@ import UserNotifications
 
 @main
 struct AlarmAppApp: App {
+    // Observes the current lifecycle state of the app (active, background, inactive)
     @Environment(\.scenePhase) private var scenePhase
+    // Global appearance settings (dark/light mode, calendar defaults)
     @StateObject private var appearance: AppearanceModel
+    // Firebase Auth listener handle to detach listener when needed
     @State private var authHandle: AuthStateDidChangeListenerHandle?
+    // Listener for Firestore reminders collection
     @State private var reminderListener: ListenerRegistration?
 
     init() {
@@ -23,8 +27,8 @@ struct AlarmAppApp: App {
         let appearanceModel = AppearanceModel()
         _appearance = StateObject(wrappedValue: appearanceModel)
         
-        setupNotificationDelegate()
-        setupPushNotifications()
+        setupNotificationDelegate() // Assign UNUserNotificationCenter delegate
+        setupPushNotifications()    // Request push notifications permission & register
     }
 
     var body: some Scene {
@@ -40,8 +44,11 @@ struct AlarmAppApp: App {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
+                // When app comes to foreground:
+                // 1. Refresh any forever-repeating alarms
                 NotificationManager.shared.refreshForeverAlarms()
-                rescheduleAllNotificationsForUser()
+                // 2. Re-schedule all notifications for the current user
+                rescheduleAllNotificationsForUser() // <- this is critical to ensure local notifications stay accurate
             }
         }
     }
@@ -49,16 +56,18 @@ struct AlarmAppApp: App {
     private func setupAuthListener() {
         authHandle = Auth.auth().addStateDidChangeListener { [self] _, user in
             if user != nil {
+                // User logged in
                 let loader = FirestoreManager()
-                appearance.loadFromFirebase(firestoreManager: loader)
-                rescheduleAllNotificationsForUser()
-                startListeningForNewReminders()
+                appearance.loadFromFirebase(firestoreManager: loader) // Load appearance preferences from Firestore
+                rescheduleAllNotificationsForUser() // Re-schedule notifications after login
+                startListeningForNewReminders() // Set up Firestore listener for new reminders
             } else {
+                // User logged out
                 DispatchQueue.main.async {
-                    self.appearance.useLightMode = true
+                    self.appearance.useLightMode = true // Reset to default appearance
                     self.appearance.defaultToCalendarView = false
                 }
-                reminderListener?.remove()
+                reminderListener?.remove()  // Stop listening for reminders
                 reminderListener = nil
             }
         }
@@ -66,16 +75,19 @@ struct AlarmAppApp: App {
 
     private func setupNotificationDelegate() {
         UNUserNotificationCenter.current().delegate = AppNotificationDelegate.shared
+        // Ensures app can handle notifications while in foreground or background
     }
     
     private func setupPushNotifications() {
         PushNotificationManager.shared.registerForPushNotifications()
+        // Requests permission from user and registers for FCM
     }
     
     private func startListeningForNewReminders() {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         
         let db = Firestore.firestore()
+        // Listen for changes in the reminders subcollection for current user
         reminderListener = db.collection("users")
             .document(uid)
             .collection("reminders")
@@ -83,16 +95,17 @@ struct AlarmAppApp: App {
                 guard let snapshot = snapshot else { return }
                 
                 for change in snapshot.documentChanges {
-                    if change.type == .added {
+                    if change.type == .added { // Only care about newly added reminders
                         let data = change.document.data()
                         let documentID = change.document.documentID
                         
+                        // Extract key fields from the reminder document
                         guard let timestamp = data["date"] as? Timestamp,
                               let title = data["title"] as? String,
                               let description = data["description"] as? String else { continue }
                         
                         let isComplete = data["isComplete"] as? Bool ?? false
-                        if isComplete { continue }
+                        if isComplete { continue } // Skip completed reminders
                         
                         let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
                         let repeatSettings = data["repeatSettings"] as? [String: Any]
@@ -105,12 +118,14 @@ struct AlarmAppApp: App {
                             customRepeat = CustomRepeatType(days: days)
                         }
                         
+                        // Determine if this device is caretaker or senior
                         FirestoreManager().checkIfCaretaker { isCaretaker in
+                            // Load user's preferred sound type from Firestore
                             FirestoreManager().loadUserSettings(field: "selectedSound") { soundValue in
                                 let soundType = (soundValue as? String) ?? "Chord"
 
                                 if isCaretaker {
-                                    // 👇 CARETAKER DEVICE SCHEDULING
+                                    // CARETAKER DEVICE SCHEDULING
                                     let seniorName = data["author"] as? String ?? "Senior"
 
                                     setAlarm(
@@ -123,12 +138,12 @@ struct AlarmAppApp: App {
                                         reminderID: documentID,
                                         soundType: soundType,
                                         caretakerAlertDelay: caretakerAlertDelay,
-                                        isCaretakerNotification: true,
+                                        isCaretakerNotification: true,              // marks it as caretaker alert
                                         seniorName: seniorName
                                     )
 
                                 } else {
-                                    // 👇 SENIOR DEVICE SCHEDULING
+                                    // SENIOR DEVICE SCHEDULING
                                     setAlarm(
                                         dateAndTime: timestamp.dateValue(),
                                         title: title,
@@ -152,6 +167,7 @@ struct AlarmAppApp: App {
 final class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = AppNotificationDelegate()
 
+    // Called when a notification is delivered while the app is in foreground
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -161,6 +177,7 @@ final class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate 
         completionHandler([.banner, .sound, .badge])
     }
 
+    // Called when user taps a notification
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,

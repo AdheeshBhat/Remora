@@ -19,8 +19,9 @@ func requestNotificationPermission() {
     }
 }
 
-
+// Main function is to schedule local notifications for reminders
 func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String, caretakerAlertDelay: TimeInterval, forUIDs: [String]? = nil, isCaretakerNotification: Bool = false, seniorName: String? = nil) {
+    //  Debug print to see which reminder is being scheduled
     print("setAlarm called for reminderID: \(reminderID), repeat_type: \(repeat_type), repeat_until_date: \(repeat_until_date), date: \(dateAndTime)")
     
     // Handle forever repeating alarms with NotificationManager
@@ -41,14 +42,16 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
             isLocked: false,
             caretakerAlertDelay: caretakerAlertDelay
         )
+        //scheduleForeverRepeatingAlarm handles infinit repeats
         NotificationManager.shared.scheduleForeverRepeatingAlarm(reminder: reminder, reminderID: reminderID, isCaretakerNotification: isCaretakerNotification, seniorName: seniorName)
         return
     }
     
+    // Create the main UNNotificationContent object
     let content = UNMutableNotificationContent()
 
     if isCaretakerNotification {
-        
+        // Caretaker notifications include the senior's name and a special body
         content.title = "🚨 \(seniorName ?? "Senior")'s Reminder"
         content.body = "\"\(title)\" is not finished yet."
         content.userInfo = [
@@ -58,6 +61,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
             "reminderTitle": title
         ]
     } else {
+        // Senior notifications are simple: title and description
         content.title = title
         content.body = description
         content.userInfo = [
@@ -68,6 +72,8 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
 //    content.sound = soundType == "Alert"
 //        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
 //        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+    
+    // --- Configure notification sound ---
     print("soundType is " + soundType)
     if soundType == "Alert" {
         content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
@@ -87,12 +93,13 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
     }
 
-    var triggers: [Date] = []
+    // Prepares trigger dates
+    var triggers: [Date] = []           // Will hold all instances of this reminder
     
     let calendar = Calendar.current
     let startDate = stripSeconds(from: dateAndTime)
     
-    // Parse repeat_until_date
+    // Parse repeat_until_date if not "Forever"
     var endDate: Date? = nil
     if repeat_until_date != "Forever" && !repeat_until_date.isEmpty {
         let fmt = DateFormatter()
@@ -100,7 +107,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         endDate = fmt.date(from: repeat_until_date)
         var single_day = DateComponents()
         single_day.day = 1
-        endDate = calendar.date(byAdding: single_day, to: endDate!)
+        endDate = calendar.date(byAdding: single_day, to: endDate!) // Make inclusive
     }
 
     // Helper to add dates for repeats
@@ -109,9 +116,9 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         let maxOccurrences = 100 // Prevent infinite loops
         var count = 0
         while (endDate == nil || nextDate <= endDate!) && count < maxOccurrences {
-            triggers.append(nextDate)
+            triggers.append(nextDate) // Add this occurence
             if let d = calendar.date(byAdding: interval, to: nextDate) {
-                nextDate = d
+                nextDate = d // Move to the next occurence
             } else {
                 break
             }
@@ -126,6 +133,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         return calendar.date(from: comps)!
     }
 
+    // Generate all trigger dates based on repeat type
     switch repeat_type {
     case "None":
         triggers.append(startDate)
@@ -169,9 +177,10 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         triggers.append(startDate)
     }
 
-    // Schedule notifications
+    // Schedule notifications for all trigger dates
     print("Triggers to schedule for reminder \(reminderID): \(triggers)")
     for (index, triggerDate) in triggers.enumerated() {
+        // If caretaker, add alert delay
         let mainTriggerDate = isCaretakerNotification ? triggerDate.addingTimeInterval(caretakerAlertDelay) : triggerDate
         let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: mainTriggerDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
@@ -187,7 +196,6 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
             }
         }
         
-        //
         // Schedule follow-up reminder for senior if task is not marked complete
         if !isCaretakerNotification {
             let halfDelaySeconds = caretakerAlertDelay / 2

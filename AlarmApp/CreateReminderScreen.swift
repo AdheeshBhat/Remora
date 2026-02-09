@@ -33,6 +33,20 @@ struct CreateReminderScreen: View {
         return formatter.string(from: date)
     }
 
+// UI layout overview:
+    
+//    VStack
+//    ├── ScrollView
+//    │    ├── Reminder title
+//    │    ├── Description
+//    │    ├── Date + time picker
+//    │    ├── Repeat settings
+//    │    ├── Priority
+//    │    ├── Caretaker alert
+//    │    └── Save button
+//    └── NavigationBarExperience
+    
+    
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -216,11 +230,17 @@ struct CreateReminderScreen: View {
                         }
                     })
 
+                    //SAVE BUTTON
                     Button(action: {
+                        // Step 1: Validate reminder title is not empty
                         if title.isEmpty {
+                            // Show alert prompting user to type a reminder name
                             showReminderNameAlert = true
                         } else {
+                            // Step 2: Prepare repeat settings for Firestore
+                            // If user selected custom repeat patterns, create a CustomRepeatType; otherwise, nil
                             let customRepeatType = customPatterns.isEmpty ? nil : CustomRepeatType(days: customPatterns.joined(separator: ","))
+                            // Step 3: Construct the ReminderData object
                             var reminder = ReminderData(
                                 ID: Int.random(in: 1000...9999),
                                 date: date,
@@ -228,37 +248,42 @@ struct CreateReminderScreen: View {
                                 description: description,
                                 repeatSettings: RepeatSettings(repeat_type: repeat_setting, repeat_until_date: repeatUntil, repeatIntervals: customRepeatType),
                                 priority: priority,
-                                isComplete: isComplete,
-                                author: author,
+                                isComplete: isComplete,     // Always false for new reminders
+                                author: author,             // Will be populated later (senior's first name)
                                 isLocked: isLocked,
                                 caretakerAlertDelay: caretakerAlertDelay
                             )
-                            //let uniqueID = Date.now
+                            // Step 4: Generate a unique string ID for Firestore documents / notifications
                             let reminderID = getExactStringFromCurrentDate()
+                            // Step 5: Get the UID of the senior whose reminder this is (current active user) -- even if caretaker is logged into senior's account, activeUID will be caretaker
                             let activeUID = firestoreManager.activeUserUID
                             
+                            // Step 6: Determine if the current device is a caretaker
                             firestoreManager.checkIfCaretaker { isCaretaker in
+                                // CARETAKER CREATING A REMINDER
                                 if isCaretaker {
-                                    // Store reminder for the senior
+                                    
+                                    // Step 6a: Store reminder in senior's Firestore collection
                                     firestoreManager.setReminder(
                                         reminderID: reminderID,
                                         reminder: reminder,
-                                        forUIDs: [activeUID]
+                                        forUIDs: [activeUID] //seniorUID
                                     )
-                                    // Store reminder for the caretaker
+                                    // Step 6b: Store the same reminder in caretaker's collection
                                     firestoreManager.setReminder(
                                         reminderID: reminderID,
                                         reminder: reminder,
-                                        forUIDs: [Auth.auth().currentUser?.uid ?? ""]
+                                        forUIDs: [Auth.auth().currentUser?.uid ?? ""] //caretakerUID
                                     )
                                     
-                                    // Schedule local notifications for caretaker's device
+                                    // Step 6c: Schedule local notifications for caretaker's device
                                     firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
                                         let soundType = (soundValue as? String) ?? "Chord"
+                                        //Fetch senior's first name
                                         firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
                                             guard let seniorName = seniorName else { return }
                                             
-                                            // Caretaker alert notification (local on caretaker's device)
+                                            // Schedule local notification for caretaker (includes senior's name)
                                             setAlarm(
                                                 dateAndTime: date,
                                                 title: title,
@@ -269,7 +294,7 @@ struct CreateReminderScreen: View {
                                                 reminderID: reminderID,
                                                 soundType: soundType,
                                                 caretakerAlertDelay: caretakerAlertDelay,
-                                                isCaretakerNotification: true,
+                                                isCaretakerNotification: true,                 //indicates this is caretaker alert
                                                 seniorName: seniorName
                                             )
                                             
@@ -278,19 +303,24 @@ struct CreateReminderScreen: View {
                                         
                                     
                                 } else {
-                                    // Senior creating reminder
+                                    //SENIOR CREATING A REMINDER
+
+                                    // Step 7a: Save reminder in senior's Firestore collection
                                     firestoreManager.setReminder(
                                         reminderID: reminderID,
                                         reminder: reminder,
                                         forUIDs: [activeUID]
                                     )
+                                    // Step 7b: Fetch all caretakers linked to this senior
                                     firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                        // Step 7c: Get senior's preferred sound for notifications
                                         firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
                                             let soundType = (soundValue as? String) ?? "Chord"
+                                            // Step 7d: Fetch senior's first name
                                             firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
                                                 guard let seniorName = seniorName else { return }
                                                 
-                                                // Senior notification (local on senior's device)
+                                                // Step 7e: Schedule local notification for senior's device
                                                 setAlarm(
                                                     dateAndTime: date,
                                                     title: title,
@@ -301,12 +331,14 @@ struct CreateReminderScreen: View {
                                                     reminderID: reminderID,
                                                     soundType: soundType,
                                                     caretakerAlertDelay: caretakerAlertDelay,
-                                                    isCaretakerNotification: false,
+                                                    isCaretakerNotification: false,                    // for senior
                                                     seniorName: seniorName
                                                 )
+                                                //Update reminder.author with senior's first name
                                                 reminder.author = seniorName
                                                 
-                                                // Schedule caretaker notifications for each linked caretaker
+                                                // Step 7f: Schedule caretaker notifications for each linked caretaker
+                                                    //Store reminder in each caretaker's Firestore collection
                                                 for caretakerUID in caretakerUIDs {
                                                     firestoreManager.setReminder(
                                                         reminderID: reminderID,

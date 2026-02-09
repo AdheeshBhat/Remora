@@ -26,10 +26,19 @@ class FirestoreManager: ObservableObject {
 
     //READING FROM THE DATABASE
     private let db = Firestore.firestore()
-    //for caretakers viewing a senior's page
+
+    // The UID of the senior currently being viewed by a caretaker
+    // If a caretaker is viewing a senior's page, this is set to the senior's UID
+    // Otherwise, it is nil and operations use the logged-in user's UID
     var currentUID: String?
+    
+    // Flag indicating whether a caretaker is currently viewing a senior's data
     @Published var isCaretakerViewingSenior: Bool = false
 
+    // The UID to use for Firestore operations
+    // - If a caretaker is viewing a senior, returns the senior's UID
+    // - Otherwise, returns the currently authenticated user's UID
+    // - Returns an empty string if no user is logged in
     var activeUserUID: String {
         if isCaretakerViewingSenior, let uid = currentUID {
             return uid
@@ -123,6 +132,13 @@ class FirestoreManager: ObservableObject {
                         }
                         return []
                     }()
+                    let completedInstances: [Date] = {
+                        if let timestamps = data["completedInstances"] as? [Timestamp] {
+                            return timestamps.map {$0.dateValue()}
+                        }
+                        return []
+                    }()
+                    
 
                     let dateFromField: Date? = {
                         if let ts = data["date"] as? Timestamp {
@@ -168,7 +184,8 @@ class FirestoreManager: ObservableObject {
                         author: author,
                         isLocked: isLocked,
                         caretakerAlertDelay: caretakerAlertDelay,
-                        deletedInstances: deletedInstances
+                        deletedInstances: deletedInstances,
+                        completedInstances: completedInstances
                     )
 
                     // Use document ID as key instead of date
@@ -583,7 +600,11 @@ class FirestoreManager: ObservableObject {
             }
     }
 
-    // Links a senior to caretaker
+    // Links a senior to the current caretaker.
+    // - Parameters:
+    //   - seniorUID: The UID of the senior to link.
+    //   - seniorUsername: The username of the senior.
+    //   - completion: Optional closure called with error or nil.
     func linkSeniorToCaretaker(seniorUID: String, seniorUsername: String, completion: ((Error?) -> Void)? = nil) {
         guard let caretaker = Auth.auth().currentUser else {
             completion?(NSError(domain: "AuthError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No caretaker logged in"]))
@@ -631,6 +652,10 @@ class FirestoreManager: ObservableObject {
             }
     }
     
+    // Fetches all caretaker UIDs linked to a senior.
+    // - Parameters:
+    //   - seniorUID: The UID of the senior.
+    //   - completion: Closure called with array of caretaker UIDs.
     func getLinkedCaretakersForSenior(seniorUID: String, completion: @escaping ([String]) -> Void) {
         let seniorRef = db.collection("users").document(seniorUID)
         seniorRef.getDocument { document, error in
@@ -679,6 +704,7 @@ class FirestoreManager: ObservableObject {
         }
     }
     
+    // Cancels all local notifications for reminders from a specific senior for the current caretaker
     func cancelAllCaretakerNotificationsFromSenior(seniorUID: String) {
         let caretakerUID = Auth.auth().currentUser?.uid ?? ""
         guard !caretakerUID.isEmpty else { return }
@@ -723,6 +749,11 @@ class FirestoreManager: ObservableObject {
     }
     
     // MARK: FCM Token Management
+    
+    // Stores an FCM token for a user in Firestore.
+    // - Parameters:
+    //   - token: The FCM token string.
+    //   - userUID: The UID of the user.
     func storeFCMToken(token: String, for userUID: String) {
         db.collection("users").document(userUID).updateData([
             "fcmToken": token,
@@ -736,6 +767,7 @@ class FirestoreManager: ObservableObject {
         }
     }
     
+    // Retrieves the FCM token for a user from Firestore
     func getFCMToken(for userUID: String, completion: @escaping (String?) -> Void) {
         db.collection("users").document(userUID).getDocument { document, error in
             if let document = document, document.exists {
@@ -747,6 +779,7 @@ class FirestoreManager: ObservableObject {
         }
     }
     
+    //Retrieves FCM tokens for multiple users
     func getFCMTokensForUsers(userUIDs: [String], completion: @escaping ([String: String]) -> Void) {
         var tokens: [String: String] = [:]
         let dispatchGroup = DispatchGroup()

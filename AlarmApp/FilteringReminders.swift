@@ -9,7 +9,7 @@ import SwiftUI
 
 // ↓ REMINDER FILTERS ↓
 
-func filterRemindersForToday(userData: [Date: ReminderData], filteredDay: Date?) -> [Date: ReminderData] {
+func filterRemindersForToday(userData: [Date: ReminderData], filteredDay: Date?, hideCompleted: Bool) -> [Date: ReminderData] {
     let calendar = Calendar.current
     let today = Date()
     var startOfDay = calendar.startOfDay(for: today)
@@ -20,13 +20,15 @@ func filterRemindersForToday(userData: [Date: ReminderData], filteredDay: Date?)
     
     return userData.filter { (_, reminder) in
         let reminderDate = reminder.date
+        // deletedInstances stores dates of removed occurences. If today's instance appears in that list, we skip it
+        let isCompleted = reminder.completedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate)}
         let isDeleted = reminder.deletedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate) }
         print("deletedInstances in reminder struct: \(reminder.deletedInstances)")
-        return reminderDate >= startOfDay && reminderDate <= endOfDay && !isDeleted
+        return reminderDate >= startOfDay && reminderDate <= endOfDay && !isDeleted && (!hideCompleted || !isCompleted)
     }
 }
 
-func filterRemindersForWeek(userData: [Date: ReminderData], filteredDay: Date?) -> [Date: ReminderData] {
+func filterRemindersForWeek(userData: [Date: ReminderData], filteredDay: Date?, hideCompleted: Bool) -> [Date: ReminderData] {
     let calendar = Calendar.current
     let today = Date()
     //(start of the week always begins on Sunday in this case) RAISES SAME QUESTION AS FOR MONTH FILTER
@@ -41,15 +43,17 @@ func filterRemindersForWeek(userData: [Date: ReminderData], filteredDay: Date?) 
     
     return userData.filter { (_, reminder) in
         let reminderDate = reminder.date
+        // deletedInstances stores dates of removed occurences. If this week's instance appears in that list, we skip it
+        let isCompleted = reminder.completedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate)}
         let isDeleted = reminder.deletedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate) }
-        return reminderDate >= startOfWeek && reminderDate <= endOfWeek && !isDeleted
+        return reminderDate >= startOfWeek && reminderDate <= endOfWeek && !isDeleted && (!hideCompleted || !isCompleted)
     }
 }
 
 
 //DOES CURRENT MONTH MEAN ex. MAR 1 - MAR 31 or ex. MAR 30 - APR 30?
     //Today's date is at the top of the page, and scroll up/down from MAR 1 - MAR 31, swipe left/right for next/previous month
-func filterRemindersForMonth(userData: [Date: ReminderData], filteredDay: Date?) -> [Date: ReminderData] {
+func filterRemindersForMonth(userData: [Date: ReminderData], filteredDay: Date?, hideCompleted: Bool) -> [Date: ReminderData] {
     let calendar = Calendar.current
     let today = Date()
     var startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
@@ -64,111 +68,114 @@ func filterRemindersForMonth(userData: [Date: ReminderData], filteredDay: Date?)
     
     return userData.filter { (_, reminder) in
         let reminderDate = reminder.date
+        // deletedInstances stores dates of removed occurences. If this month's instance appears in that list, we skip it
+        let isCompleted = reminder.completedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate)}
         let isDeleted = reminder.deletedInstances.contains { Calendar.current.isDate($0, inSameDayAs: reminderDate) }
-        return reminderDate >= startOfMonth && reminderDate <= inclusiveEndOfMonth && !isDeleted
+        return reminderDate >= startOfMonth && reminderDate <= inclusiveEndOfMonth && !isDeleted && (!hideCompleted || !isCompleted)
     }
 }
 
 //--------------------------------------------------------------- 1
 
+//NOT CALLED ANYWHERE
 //Returns reminders based on day, week, or month filter
-func showAllReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = false, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [Date: ReminderData]) -> some View {
-    //let userData = database.wrappedValue.users[userID] ?? [:]
-    
-    let filteredUserData: [Date: ReminderData]
-    if period == "today" {
-        filteredUserData = filterRemindersForToday(userData: userData, filteredDay: filteredDay)
-    } else if period == "week" {
-        filteredUserData = filterRemindersForWeek(userData: userData, filteredDay: filteredDay)
-    } else if period == "month" {
-        filteredUserData = filterRemindersForMonth(userData: userData, filteredDay: filteredDay)
-    } else {
-        filteredUserData = userData
-    }
-    
-    let dateFormatter = DateFormatter()
-        //can change to .short, .medium, or .long format
-        dateFormatter.dateStyle = .medium
-        dateFormatter.timeStyle = .short
-    
-    return VStack {
-        ForEach(filteredUserData.keys.sorted(), id: \.self) { date in
-            if let reminder = filteredUserData[date] {
-                HStack {
-                    ReminderRow(
-                        cur_screen: cur_screen,
-                        title: getTitle(reminder: reminder),
-                        time: getTimeFromReminder(reminder: reminder),
-                        reminderDate: getDayFromReminder(reminder: reminder),
-                        reminder: reminder,
-                        showEditButton: showEditButton,
-                        showDeleteButton: showDeleteButton,
-                        userID: userID,
-                        dateKey: date,
-                        documentID: createExactStringFromDate(date: date),
-                        firestoreManager: firestoreManager,
-                        onUpdate: nil
-                    )
-                    
-                    //Show past reminders that have already been completed
-                    
-                } //HStack ending
-                //.padding()
-            }// if statement ending
-        } //ForEach() ending
-    }
-
-}
+//func showAllReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = false, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [Date: ReminderData]) -> some View {
+//    //let userData = database.wrappedValue.users[userID] ?? [:]
+//    
+//    let filteredUserData: [Date: ReminderData]
+//    if period == "today" {
+//        filteredUserData = filterRemindersForToday(userData: userData, filteredDay: filteredDay)
+//    } else if period == "week" {
+//        filteredUserData = filterRemindersForWeek(userData: userData, filteredDay: filteredDay)
+//    } else if period == "month" {
+//        filteredUserData = filterRemindersForMonth(userData: userData, filteredDay: filteredDay)
+//    } else {
+//        filteredUserData = userData
+//    }
+//    
+//    let dateFormatter = DateFormatter()
+//        //can change to .short, .medium, or .long format
+//        dateFormatter.dateStyle = .medium
+//        dateFormatter.timeStyle = .short
+//    
+//    return VStack {
+//        ForEach(filteredUserData.keys.sorted(), id: \.self) { date in
+//            if let reminder = filteredUserData[date] {
+//                HStack {
+//                    ReminderRow(
+//                        cur_screen: cur_screen,
+//                        title: getTitle(reminder: reminder),
+//                        time: getTimeFromReminder(reminder: reminder),
+//                        reminderDate: getDayFromReminder(reminder: reminder),
+//                        reminder: reminder,
+//                        showEditButton: showEditButton,
+//                        showDeleteButton: showDeleteButton,
+//                        userID: userID,
+//                        dateKey: date,
+//                        documentID: createExactStringFromDate(date: date),
+//                        firestoreManager: firestoreManager,
+//                        onUpdate: nil
+//                    )
+//                    
+//                    //Show past reminders that have already been completed
+//                    
+//                } //HStack ending
+//                //.padding()
+//            }// if statement ending
+//        } //ForEach() ending
+//    }
+//
+//}
 
 //----------------------------------------------------------------- 2
 
-
-func showIncompleteReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = false, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [Date: ReminderData]) -> some View {
-    //let userData = database.wrappedValue.users[userID] ?? [:]
-    
-    let filteredUserData: [Date: ReminderData]
-    if period == "today" {
-        filteredUserData = filterRemindersForToday(userData: userData, filteredDay: filteredDay)
-    } else if period == "week" {
-        filteredUserData = filterRemindersForWeek(userData: userData, filteredDay: filteredDay)
-    } else if period == "month" {
-        filteredUserData = filterRemindersForMonth(userData: userData, filteredDay: filteredDay)
-    } else {
-        filteredUserData = userData
-    }
-    
-    let dateFormatter = DateFormatter()
-        //can change to .short, .medium, or .long format
-        dateFormatter.dateStyle = .medium
-        dateFormatter.timeStyle = .short
-
-    //let incompleteReminders = filteredUserData.filter { $0.value.isComplete != true }
-
-    return VStack {
-        ForEach(filteredUserData.keys.sorted(), id: \.self) { date in
-            if let reminder = filteredUserData[date], reminder.isComplete != true {
-                HStack {
-
-                    ReminderRow(
-                        cur_screen: cur_screen,
-                        title: getTitle(reminder: reminder),
-                        time: getTimeFromReminder(reminder: reminder),
-                        reminderDate: getDayFromReminder(reminder: reminder),
-                        reminder: reminder,
-                        showEditButton: showEditButton,
-                        showDeleteButton: showDeleteButton,
-                        userID: userID,
-                        dateKey: date,
-                        documentID: createExactStringFromDate(date: date),
-                        firestoreManager: firestoreManager,
-                        onUpdate: nil
-                    ) //ReminderRow ending
-                } //HStack ending
-                //.padding()
-            } // if statement ending
-        } //ForEach() ending
-    }
-}
+////NOT CALLED ANYWHERE
+//func showIncompleteReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = false, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [Date: ReminderData]) -> some View {
+//    //let userData = database.wrappedValue.users[userID] ?? [:]
+//    
+//    let filteredUserData: [Date: ReminderData]
+//    if period == "today" {
+//        filteredUserData = filterRemindersForToday(userData: userData, filteredDay: filteredDay)
+//    } else if period == "week" {
+//        filteredUserData = filterRemindersForWeek(userData: userData, filteredDay: filteredDay)
+//    } else if period == "month" {
+//        filteredUserData = filterRemindersForMonth(userData: userData, filteredDay: filteredDay)
+//    } else {
+//        filteredUserData = userData
+//    }
+//    
+//    let dateFormatter = DateFormatter()
+//        //can change to .short, .medium, or .long format
+//        dateFormatter.dateStyle = .medium
+//        dateFormatter.timeStyle = .short
+//
+//    //let incompleteReminders = filteredUserData.filter { $0.value.isComplete != true }
+//
+//    return VStack {
+//        ForEach(filteredUserData.keys.sorted(), id: \.self) { date in
+//            if let reminder = filteredUserData[date], reminder.isComplete != true {
+//                HStack {
+//
+//                    ReminderRow(
+//                        cur_screen: cur_screen,
+//                        title: getTitle(reminder: reminder),
+//                        time: getTimeFromReminder(reminder: reminder),
+//                        reminderDate: getDayFromReminder(reminder: reminder),
+//                        reminder: reminder,
+//                        showEditButton: showEditButton,
+//                        showDeleteButton: showDeleteButton,
+//                        userID: userID,
+//                        dateKey: date,
+//                        documentID: createExactStringFromDate(date: date),
+//                        firestoreManager: firestoreManager,
+//                        onUpdate: nil
+//                    ) //ReminderRow ending
+//                } //HStack ending
+//                //.padding()
+//            } // if statement ending
+//        } //ForEach() ending
+//    }
+//}
 
 
 //----------------------------------------------------------------- 3
@@ -189,9 +196,10 @@ func weekHeader(from date: Date) -> String {
     return formatter.string(from: startOfWeek)
 }
 
+// Main renderer for the reminders screen after repeating reminders have already been expanded
 func formattedReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = true, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [String: ReminderData], onUpdate: (() -> Void)? = nil) -> some View {
-    let expandedReminders = expandRepeatingReminders(userData: userData, period: period, filteredDay: filteredDay)
-    let sortedReminders = expandedReminders.sorted { $0.value.date < $1.value.date }
+    //let expandedReminders = expandRepeatingReminders(userData: userData, period: period, filteredDay: filteredDay)
+    let sortedReminders = userData.sorted { $0.value.date < $1.value.date }
 
     let calendar = Calendar.current
 
@@ -255,11 +263,13 @@ func formattedReminders(userID: Int, period: String, cur_screen: Binding<Screen>
     }
 }
 
-func expandRepeatingReminders(userData: [String: ReminderData], period: String, filteredDay: Date?) -> [String: ReminderData] {
+// Generates virtual reminder instances that only exist in memory
+func expandRepeatingReminders(userData: [String: ReminderData], period: String, filteredDay: Date?, hideCompleted: Bool) -> [String: ReminderData] {
+    // Holds the final expanded reminders that the UI renders
     var expandedData: [String: ReminderData] = [:]
     let calendar = Calendar.current
     
-    // Determine date range based on period
+    // Determine date range based on period (today/week/month)
     let (startDate, endDate) = {
         let today = filteredDay ?? Date()
         switch period {
@@ -281,12 +291,18 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
         }
     }()
     
+    // Loop through every reminder document from Firestore
     for (documentID, reminder) in userData {
+        // How this reminder repeats (None, Daily, Weekly, Custom, etc.)
         let repeatType = reminder.repeatSettings.repeat_type
         
+        // Only include this reminder if:
+        // 1. Its date is inside the selected range
+        // 2. This specific instance was NOT deleted
         if repeatType == "None" {
             // Non-repeating reminder
             if reminder.date >= startDate && reminder.date <= endDate &&
+                (!hideCompleted || !reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date)} )) &&
                !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }) {
                 expandedData[documentID] = reminder
                 
@@ -294,11 +310,14 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
         } else if repeatType == "Custom" {
             // Handle custom patterns differently - generate all occurrences in range
             if let intervals = reminder.repeatSettings.repeatIntervals, let daysString = intervals.days {
+                // Split patterns into individual rules
                 let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+                // Used to prevent duplicate instances
                 var seenDates = Set<String>()
                 
                 // Include original reminder if it's in range
                 if reminder.date >= startDate && reminder.date <= endDate &&
+                    (!hideCompleted || !reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date)} )) &&
                    !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }) {                    expandedData[documentID] = reminder
                 }
                 
@@ -308,24 +327,34 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 var currentMonth = calendar.dateComponents([.year, .month], from: startMonth)
                 let endMonth = calendar.dateComponents([.year, .month], from: endDate)
                 
+                // Caps generation at 50
                 while (currentMonth.year! < endMonth.year! || (currentMonth.year! == endMonth.year! && currentMonth.month! <= endMonth.month!)) && seenDates.count < 50 {
                     let monthStart = calendar.date(from: currentMonth)!
                     
+                    //Apply each custom pattern (e.g. "2nd Tue")
                     for pattern in patterns {
+                        // Convert pattern → actual date in this month
                         if let occurrenceDate = calculatePatternDateForMonth(pattern: pattern, month: monthStart) {
+                            // Preserve original reminder time (hour/minute)
                             let finalDate = calendar.date(bySettingHour: calendar.component(.hour, from: reminder.date), minute: calendar.component(.minute, from: reminder.date), second: 0, of: occurrenceDate)!
                             let dateKey = createUniqueIDFromDate(date: finalDate)
 
+                            // Only include valid, non-deleted, non-duplicate instances
                             if finalDate >= startDate && finalDate <= endDate &&
                                !seenDates.contains(dateKey) &&
+                                (!hideCompleted || !reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate)} )) &&
                                !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate) }) {                                seenDates.insert(dateKey)
+                                // Clone the reminder and override instance-specific fields
                                 var instanceReminder = reminder
                                 instanceReminder.date = finalDate
+                                // Mark instance complete if its date appears in completedInstances
+                                instanceReminder.isComplete = (hideCompleted || reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate)} ))
                                 expandedData["\(documentID)-\(dateKey)"] = instanceReminder
                             }
                         }
                     }
                     
+                    // Move to next month
                     currentMonth.month! += 1
                     if currentMonth.month! > 12 {
                         currentMonth.month = 1
@@ -334,11 +363,14 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 }
             }
         } else {
-            // Standard repeating reminder - always include original if in range
+            // Standard repeating reminder - always include original if in range (daily/weekly/monthly/yearly)
+            
+            // Counter used to generate unique instance IDs
             var instanceCount = 0
             
             // Include original reminder if it's in range
             if reminder.date >= startDate && reminder.date <= endDate &&
+                (!hideCompleted || !reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date)} )) &&
                !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }) {                expandedData["\(documentID)-\(instanceCount)"] = reminder
                 instanceCount += 1
                 print(reminder.deletedInstances)
@@ -347,7 +379,7 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
             // Generate additional instances
             var currentDate = reminder.date
             
-            // Generate future instances
+            // Generate future instances (up to 50)
             while instanceCount < 50 {
                 let nextDate: Date?
                 switch repeatType {
@@ -363,6 +395,7 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                     nextDate = nil
                 }
                 
+                // Stop if no valid next date
                 guard let next = nextDate, next > currentDate else { break }
                 currentDate = next
                 
@@ -378,9 +411,11 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 
                 if currentDate > endDate { break }
                 if currentDate >= startDate &&
+                    (!hideCompleted || !reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: currentDate)} )) &&
                    !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: currentDate) }) {
                     var instanceReminder = reminder
                     instanceReminder.date = currentDate
+                    instanceReminder.isComplete = reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: currentDate) })
                     expandedData["\(documentID)-\(instanceCount)"] = instanceReminder
                     instanceCount += 1
                 }
@@ -403,6 +438,7 @@ func expandRepeatingRemindersForCalendar(userData: [String: ReminderData], start
                 !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }){         //HERE----------
                 expandedData[documentID] = reminder
             }
+            
         } else if repeatType == "Custom" {
             if let intervals = reminder.repeatSettings.repeatIntervals, let daysString = intervals.days {
                 let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
@@ -488,6 +524,7 @@ func expandRepeatingRemindersForCalendar(userData: [String: ReminderData], start
                 if currentDate > endDate { break }
                 if currentDate >= startDate {
                     let isDeleted = reminder.deletedInstances.contains { Calendar.current.isDate($0, inSameDayAs: currentDate) }
+                    let isCompleted = reminder.completedInstances.contains{ Calendar.current.isDate($0, inSameDayAs: currentDate) }
                     if !isDeleted {
                         var instanceReminder = reminder
                         instanceReminder.date = currentDate

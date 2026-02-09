@@ -50,9 +50,10 @@ struct ReminderData: Codable, Equatable {
     var isLocked: Bool      //true = locked
     var caretakerAlertDelay: TimeInterval
     var deletedInstances: [Date]
+    var completedInstances: [Date]
 
     
-    init(ID: Int, date: Date, title: String, description: String, repeatSettings: RepeatSettings, priority: String, isComplete: Bool, author: String, isLocked: Bool, caretakerAlertDelay: TimeInterval, deletedInstances: [Date] = []) {
+    init(ID: Int, date: Date, title: String, description: String, repeatSettings: RepeatSettings, priority: String, isComplete: Bool, author: String, isLocked: Bool, caretakerAlertDelay: TimeInterval, deletedInstances: [Date] = [], completedInstances: [Date] = []) {
         self.ID = ID
         self.date = date
         self.title = title
@@ -66,6 +67,7 @@ struct ReminderData: Codable, Equatable {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMM d HH:mm:ss"
         self.deletedInstances = deletedInstances
+        self.completedInstances = completedInstances
     }
 }
 

@@ -25,9 +25,10 @@ struct RemindersScreen: View {
     @State private var canResetDate: Bool = false
     @State var remindersForUser: [String: ReminderData]
     let firestoreManager: FirestoreManager
+    // Toggle to hide completed reminders AND completed instances of repeating reminders
     @AppStorage("hideCompletedReminders") private var isHideCompletedReminders: Bool = false
     
-    //create a variable that would change the period depending on the button pressed
+    //Variable that changes the period depending on the button pressed
     var currentPeriodText: String {
         let today = Date()
         
@@ -271,16 +272,20 @@ struct RemindersScreen: View {
                     ScrollViewReader { proxy in
                         LazyVStack(spacing: 12) {
                             // Filter the reminders for the current period and date, with hide completed applied
+                            // Takes firestore reminders and converts repeating reminders into per-day instances
+                            // Output type: [String: ReminderData]
                             let expandedReminders = expandRepeatingReminders(
                                 userData: remindersForUser,
                                 period: filterPeriod,
-                                filteredDay: calculateDateFor()
+                                filteredDay: calculateDateFor(),
+                                hideCompleted: isHideCompletedReminders
                             )
 
                             let visibleReminders = isHideCompletedReminders
                                 ? expandedReminders.filter { !$0.value.isComplete }
                                 : expandedReminders
-
+                            
+                            // This function sorts reminders and creates ReminderRow views (actual UI)
                             let filteredReminders = formattedReminders(
                                 userID: 1,
                                 period: filterPeriod,
@@ -325,7 +330,8 @@ struct RemindersScreen: View {
         let expandedReminders = expandRepeatingReminders(
             userData: reminders,
             period: period,
-            filteredDay: filteredDay
+            filteredDay: filteredDay,
+            hideCompleted: isHideCompletedReminders
         )
 
         let visibleReminders = isHideCompletedReminders
@@ -378,6 +384,9 @@ struct RemindersScreen: View {
             }
     }
     
+    // Applies swipeOffset to the correct date variable
+    // (day/week/month)
+    // Then resets swipeOffset to 0
     func updateFilteredDay() {
         let calendar = Calendar.current
         let today = Calendar.current.startOfDay(for: Date())
@@ -405,7 +414,7 @@ struct RemindersScreen: View {
     }
     
     //Helper function that determines whether the period currently being displayed is different from today's period
-    //Used to show/hide the reset button
+    //Used to show/hide the "Today" reset button
     private func displayedPeriodDiffersFromToday() -> Bool {
         let cal = Calendar.current
         let today = Date()
@@ -441,6 +450,11 @@ struct RemindersScreen: View {
         }
     }
 
+    // Returns the actual Date that should be displayed
+    // based on:
+    // - filterPeriod
+    // - selected base date
+    // - swipe offset
     func calculateDateFor() -> Date {
         switch filterPeriod {
         case "today":
@@ -460,6 +474,7 @@ struct RemindersScreen: View {
         }
     }
     
+    // Fetches reminders from Firestore and stores them in remindersForUser
     private func loadReminders() {
         firestoreManager.getRemindersForUser { reminders in
             self.remindersForUser = reminders ?? [:]
@@ -469,6 +484,7 @@ struct RemindersScreen: View {
 } //struct ending
 
 
+// Represents one visible reminder instance
 
 struct ReminderRow: View {
     @Binding var cur_screen: Screen
