@@ -346,19 +346,6 @@ struct CreateReminderScreen: View {
                                                         forUIDs: [caretakerUID]
                                                     )
                                                     
-//                                                    setAlarm(
-//                                                        dateAndTime: date,
-//                                                        title: title,
-//                                                        description: description,
-//                                                        repeat_type: reminder.repeatSettings.repeat_type,
-//                                                        repeat_until_date: reminder.repeatSettings.repeat_until_date,
-//                                                        repeatIntervals: reminder.repeatSettings.repeatIntervals,
-//                                                        reminderID: reminderID,
-//                                                        soundType: soundType,
-//                                                        caretakerAlertDelay: caretakerAlertDelay,
-//                                                        isCaretakerNotification: true,
-//                                                        seniorName: seniorName
-//                                                    )
                                                 }
                                             }
                                         }

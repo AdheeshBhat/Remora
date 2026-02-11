@@ -95,7 +95,7 @@ struct AlarmAppApp: App {
                 guard let snapshot = snapshot else { return }
                 
                 for change in snapshot.documentChanges {
-                    if change.type == .added { // Only care about newly added reminders
+                    if change.type == .added  || change.type == .modified { // Only care about newly added reminders or edited
                         let data = change.document.data()
                         let documentID = change.document.documentID
                         
@@ -105,7 +105,11 @@ struct AlarmAppApp: App {
                               let description = data["description"] as? String else { continue }
                         
                         let isComplete = data["isComplete"] as? Bool ?? false
-                        if isComplete { continue } // Skip completed reminders
+                        if isComplete {
+                            // Skip completed reminders, cancel existing notification
+                            cancelAlarm(reminderID: documentID)
+                            continue
+                        }
                         
                         let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
                         let repeatSettings = data["repeatSettings"] as? [String: Any]
@@ -158,6 +162,9 @@ struct AlarmAppApp: App {
                                 }
                             }
                         }
+                    }
+                    if change.type == .removed {
+                        cancelAlarm(reminderID: change.document.documentID)
                     }
                 }
             }

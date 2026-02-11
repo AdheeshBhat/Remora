@@ -7,6 +7,7 @@
 
 import SwiftUI
 import FirebaseFirestore
+import FirebaseAuth
 
 struct EditReminderScreen: View {
     @Environment(\.presentationMode) private var presentationMode
@@ -235,22 +236,59 @@ struct EditReminderScreen: View {
                         ) { success in
                             if success {
                                 DispatchQueue.main.async {
-                                    let customRepeatType = localCustomPatterns.isEmpty ? nil : CustomRepeatType(days: localCustomPatterns.joined(separator: ","))
-                                    
                                     // Cancel the old notification and set a new one
                                     cancelAlarm(reminderID: reminderID)
                                     guard !isComplete else { return }
+
+                                    // Reconstruct ReminderData object (mirror CreateReminderScreen)
+                                    let customRepeatType = localCustomPatterns.isEmpty
+                                        ? nil
+                                        : CustomRepeatType(days: localCustomPatterns.joined(separator: ","))
+
+                                    var reminder = ReminderData(
+                                        ID: Int.random(in: 1000...9999),
+                                        date: localDate,
+                                        title: localTitle,
+                                        description: localDescription,
+                                        repeatSettings: RepeatSettings(
+                                            repeat_type: localEditScreenRepeatSetting,
+                                            repeat_until_date: localEditScreenRepeatUntil,
+                                            repeatIntervals: customRepeatType
+                                        ),
+                                        priority: localEditScreenPriority,
+                                        isComplete: isComplete,
+                                        author: "",
+                                        isLocked: localEditScreenIsLocked,
+                                        caretakerAlertDelay: caretakerAlertDelay
+                                    )
 
                                     let activeUID = firestoreManager.activeUserUID
 
                                     firestoreManager.checkIfCaretaker { isCaretaker in
                                         if isCaretaker {
-                                            // Caretaker editing a senior’s reminder: always use the senior that owns the reminder
+                                            // CARETAKER EDITING A SENIOR'S REMINDER
                                             let seniorUID = reminderOwnerUID.isEmpty ? activeUID : reminderOwnerUID
+
+                                            // Rewrite reminder for senior
+                                            firestoreManager.setReminder(
+                                                reminderID: reminderID,
+                                                reminder: reminder,
+                                                forUIDs: [seniorUID]
+                                            )
+
+                                            // Rewrite reminder for caretaker
+                                            firestoreManager.setReminder(
+                                                reminderID: reminderID,
+                                                reminder: reminder,
+                                                forUIDs: [Auth.auth().currentUser?.uid ?? ""]
+                                            )
+
+                                            // Schedule caretaker local notification
                                             firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
                                                 let soundType = (soundValue as? String) ?? "Chord"
                                                 firestoreManager.getUserFirstName(forUID: seniorUID) { seniorName in
                                                     guard let seniorName = seniorName else { return }
+
                                                     setAlarm(
                                                         dateAndTime: localDate,
                                                         title: localTitle,
@@ -266,41 +304,58 @@ struct EditReminderScreen: View {
                                                     )
                                                 }
                                             }
-                                        } else {
-                                            // Senior editing their own reminder (unchanged)
-                                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-                                                //let targetUIDs = [activeUID] + caretakerUIDs
 
-                                                //for _ in targetUIDs {
-                                                    firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                                        let soundType = (soundValue as? String) ?? "Chord"
-                                                        firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
-                                                            guard let seniorName = seniorName else { return }
-                                                            setAlarm(
-                                                                dateAndTime: localDate,
-                                                                title: localTitle,
-                                                                description: localDescription,
-                                                                repeat_type: localEditScreenRepeatSetting,
-                                                                repeat_until_date: localEditScreenRepeatUntil,
-                                                                repeatIntervals: customRepeatType,
-                                                                reminderID: reminderID,
-                                                                soundType: soundType,
-                                                                caretakerAlertDelay: caretakerAlertDelay,
-                                                                isCaretakerNotification: false,
-                                                                seniorName: seniorName
-                                                            )
-                                                        }
-                                                    }
-                                                //}
+                                        } else {
+                                            // SENIOR EDITING THEIR OWN REMINDER
+
+                                            // Rewrite reminder for senior
+                                            firestoreManager.setReminder(
+                                                reminderID: reminderID,
+                                                reminder: reminder,
+                                                forUIDs: [activeUID]
+                                            )
+
+                                            // Rewrite reminder for all linked caretakers
+                                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                                for caretakerUID in caretakerUIDs {
+                                                    firestoreManager.setReminder(
+                                                        reminderID: reminderID,
+                                                        reminder: reminder,
+                                                        forUIDs: [caretakerUID]
+                                                    )
+                                                }
+                                            }
+
+                                            // Schedule senior local notification
+                                            firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                                let soundType = (soundValue as? String) ?? "Chord"
+                                                firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                                    guard let seniorName = seniorName else { return }
+
+                                                    reminder.author = seniorName
+
+                                                    setAlarm(
+                                                        dateAndTime: localDate,
+                                                        title: localTitle,
+                                                        description: localDescription,
+                                                        repeat_type: localEditScreenRepeatSetting,
+                                                        repeat_until_date: localEditScreenRepeatUntil,
+                                                        repeatIntervals: customRepeatType,
+                                                        reminderID: reminderID,
+                                                        soundType: soundType,
+                                                        caretakerAlertDelay: caretakerAlertDelay,
+                                                        isCaretakerNotification: false,
+                                                        seniorName: seniorName
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                    
+
                                     onUpdate?()
                                 }
                             } //if statement ending
                         }
-                        
                         presentationMode.wrappedValue.dismiss()
                     }) {
                         Text("Save Changes")
