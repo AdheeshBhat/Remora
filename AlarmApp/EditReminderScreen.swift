@@ -269,26 +269,28 @@ struct EditReminderScreen: View {
                                             // CARETAKER EDITING A SENIOR'S REMINDER
                                             let seniorUID = reminderOwnerUID.isEmpty ? activeUID : reminderOwnerUID
 
-                                            // Rewrite reminder for senior
-                                            firestoreManager.setReminder(
-                                                reminderID: reminderID,
-                                                reminder: reminder,
-                                                forUIDs: [seniorUID]
-                                            )
+                                            // Ensure reminder.author contains the senior's name
+                                            firestoreManager.getUserFirstName(forUID: seniorUID) { seniorName in
+                                                guard let seniorName = seniorName else { return }
+                                                reminder.author = seniorName
 
-                                            // Rewrite reminder for caretaker
-                                            firestoreManager.setReminder(
-                                                reminderID: reminderID,
-                                                reminder: reminder,
-                                                forUIDs: [Auth.auth().currentUser?.uid ?? ""]
-                                            )
+                                                // Rewrite reminder for senior
+                                                firestoreManager.setReminder(
+                                                    reminderID: reminderID,
+                                                    reminder: reminder,
+                                                    forUIDs: [seniorUID]
+                                                )
 
-                                            // Schedule caretaker local notification
-                                            firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                                let soundType = (soundValue as? String) ?? "Chord"
-                                                firestoreManager.getUserFirstName(forUID: seniorUID) { seniorName in
-                                                    guard let seniorName = seniorName else { return }
+                                                // Rewrite reminder for caretaker
+                                                firestoreManager.setReminder(
+                                                    reminderID: reminderID,
+                                                    reminder: reminder,
+                                                    forUIDs: [Auth.auth().currentUser?.uid ?? ""]
+                                                )
 
+                                                // Schedule caretaker local notification
+                                                firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                                    let soundType = (soundValue as? String) ?? "Chord"
                                                     setAlarm(
                                                         dateAndTime: localDate,
                                                         title: localTitle,
@@ -304,35 +306,37 @@ struct EditReminderScreen: View {
                                                     )
                                                 }
                                             }
-
                                         } else {
                                             // SENIOR EDITING THEIR OWN REMINDER
 
-                                            // Rewrite reminder for senior
-                                            firestoreManager.setReminder(
-                                                reminderID: reminderID,
-                                                reminder: reminder,
-                                                forUIDs: [activeUID]
-                                            )
+                                            // Fetch senior's first name FIRST so we can store it properly
+                                            firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                                                guard let seniorName = seniorName else { return }
 
-                                            // Rewrite reminder for all linked caretakers
-                                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-                                                for caretakerUID in caretakerUIDs {
-                                                    firestoreManager.setReminder(
-                                                        reminderID: reminderID,
-                                                        reminder: reminder,
-                                                        forUIDs: [caretakerUID]
-                                                    )
+                                                // Store senior name inside reminder so caretaker device can read it
+                                                reminder.author = seniorName
+
+                                                // Rewrite reminder for senior
+                                                firestoreManager.setReminder(
+                                                    reminderID: reminderID,
+                                                    reminder: reminder,
+                                                    forUIDs: [activeUID]
+                                                )
+
+                                                // Rewrite reminder for all linked caretakers
+                                                firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                                    for caretakerUID in caretakerUIDs {
+                                                        firestoreManager.setReminder(
+                                                            reminderID: reminderID,
+                                                            reminder: reminder,
+                                                            forUIDs: [caretakerUID]
+                                                        )
+                                                    }
                                                 }
-                                            }
 
-                                            // Schedule senior local notification
-                                            firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                                let soundType = (soundValue as? String) ?? "Chord"
-                                                firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
-                                                    guard let seniorName = seniorName else { return }
-
-                                                    reminder.author = seniorName
+                                                // Now schedule senior local notification
+                                                firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
+                                                    let soundType = (soundValue as? String) ?? "Chord"
 
                                                     setAlarm(
                                                         dateAndTime: localDate,
@@ -350,6 +354,7 @@ struct EditReminderScreen: View {
                                                 }
                                             }
                                         }
+
                                     }
 
                                     onUpdate?()

@@ -96,6 +96,7 @@ struct AlarmAppApp: App {
                 
                 for change in snapshot.documentChanges {
                     if change.type == .added  || change.type == .modified { // Only care about newly added reminders or edited
+                        print("LISTENER TRIGGERED")
                         let data = change.document.data()
                         let documentID = change.document.documentID
                         

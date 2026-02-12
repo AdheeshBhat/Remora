@@ -115,15 +115,22 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         var nextDate = startDate
         let maxOccurrences = 100 // Prevent infinite loops
         var count = 0
+        print("I entered the function")
+        print(startDate)
         while (endDate == nil || nextDate <= endDate!) && count < maxOccurrences {
+            print("nextDate: ")
+            print(nextDate)
             triggers.append(nextDate) // Add this occurence
             if let d = calendar.date(byAdding: interval, to: nextDate) {
                 nextDate = d // Move to the next occurence
             } else {
+                print("Couldn't schedule repeating reminder")
                 break
             }
             count += 1
         }
+        print("triggers: ")
+        print(triggers)
     }
     
     //Helper to make sure time for notification is exactly :00 seconds
@@ -187,7 +194,7 @@ func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type
         let role = isCaretakerNotification ? "caretaker" : "senior"
         let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)-\(role)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-        //PushNotificationManager.shared.
+        
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 print("Error adding notification: \(error)")

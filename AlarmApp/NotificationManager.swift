@@ -24,27 +24,6 @@ class NotificationManager: ObservableObject {
         isCaretakerNotification: Bool = false,
         seniorName: String? = nil
     ) {
-        // Check if the reminder's repeat_until_date is NOT "Forever"
-        // If it's not forever, we don't need special batching; just call the normal setAlarm
-        guard reminder.repeatSettings.repeat_until_date == "Forever" else {
-            FirestoreManager().loadUserSettings(field: "selectedSound") { soundValue in
-                let soundType = (soundValue as? String) ?? "Chord"
-                // Use existing setAlarm function for non-forever alarms
-                setAlarm(
-                    dateAndTime: reminder.date,
-                    title: reminder.title,
-                    description: reminder.description,
-                    repeat_type: reminder.repeatSettings.repeat_type,
-                    repeat_until_date: reminder.repeatSettings.repeat_until_date,
-                    repeatIntervals: reminder.repeatSettings.repeatIntervals,
-                    reminderID: reminderID,
-                    soundType: soundType,
-                    caretakerAlertDelay: reminder.caretakerAlertDelay,
-                    seniorName: seniorName
-                )
-            }
-            return
-        }
         
         // Schedule initial batch for forever repeating alarms
         scheduleNextBatch(
