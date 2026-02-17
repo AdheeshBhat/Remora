@@ -39,6 +39,14 @@ class PushNotificationManager: NSObject, ObservableObject {
             }
         }
     }
+    
+    func sendPushNotification(to userUID: String, title: String, body: String, reminderID: String) {
+        FirestoreManager().getFCMToken(for: userUID) { token in
+            guard let token = token else { return }
+            // Trigger Cloud Function or send via FCM API
+            print("Would send push to token \(token): \(title)")
+        }
+    }
 }
 
 extension PushNotificationManager: MessagingDelegate {

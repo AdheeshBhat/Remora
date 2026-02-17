@@ -232,126 +232,40 @@ struct CreateReminderScreen: View {
 
                     //SAVE BUTTON
                     Button(action: {
-                        // Step 1: Validate reminder title is not empty
                         if title.isEmpty {
-                            // Show alert prompting user to type a reminder name
                             showReminderNameAlert = true
                         } else {
-                            // Step 2: Prepare repeat settings for Firestore
-                            // If user selected custom repeat patterns, create a CustomRepeatType; otherwise, nil
                             let customRepeatType = customPatterns.isEmpty ? nil : CustomRepeatType(days: customPatterns.joined(separator: ","))
-                            // Step 3: Construct the ReminderData object
-                            var reminder = ReminderData(
+                            let reminder = ReminderData(
                                 ID: Int.random(in: 1000...9999),
                                 date: date,
                                 title: title,
                                 description: description,
                                 repeatSettings: RepeatSettings(repeat_type: repeat_setting, repeat_until_date: repeatUntil, repeatIntervals: customRepeatType),
                                 priority: priority,
-                                isComplete: isComplete,     // Always false for new reminders
-                                author: author,             // Will be populated later (senior's first name)
+                                isComplete: false,
+                                author: author,
                                 isLocked: isLocked,
                                 caretakerAlertDelay: caretakerAlertDelay
                             )
-                            // Step 4: Generate a unique string ID for Firestore documents / notifications
                             let reminderID = getExactStringFromCurrentDate()
-                            // Step 5: Get the UID of the senior whose reminder this is (current active user) -- even if caretaker is logged into senior's account, activeUID will be caretaker
                             let activeUID = firestoreManager.activeUserUID
                             
-                            // Step 6: Determine if the current device is a caretaker
                             firestoreManager.checkIfCaretaker { isCaretaker in
-                                // CARETAKER CREATING A REMINDER
                                 if isCaretaker {
-                                    
-                                    // Step 6a: Store reminder in senior's Firestore collection
-                                    firestoreManager.setReminder(
-                                        reminderID: reminderID,
-                                        reminder: reminder,
-                                        forUIDs: [activeUID] //seniorUID
-                                    )
-                                    // Step 6b: Store the same reminder in caretaker's collection
-                                    firestoreManager.setReminder(
-                                        reminderID: reminderID,
-                                        reminder: reminder,
-                                        forUIDs: [Auth.auth().currentUser?.uid ?? ""] //caretakerUID
-                                    )
-                                    
-                                    // Step 6c: Schedule local notifications for caretaker's device
-                                    firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                        let soundType = (soundValue as? String) ?? "Chord"
-                                        //Fetch senior's first name
-                                        firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
-                                            guard let seniorName = seniorName else { return }
-                                            
-                                            // Schedule local notification for caretaker (includes senior's name)
-                                            setAlarm(
-                                                dateAndTime: date,
-                                                title: title,
-                                                description: description,
-                                                repeat_type: reminder.repeatSettings.repeat_type,
-                                                repeat_until_date: reminder.repeatSettings.repeat_until_date,
-                                                repeatIntervals: reminder.repeatSettings.repeatIntervals,
-                                                reminderID: reminderID,
-                                                soundType: soundType,
-                                                caretakerAlertDelay: caretakerAlertDelay,
-                                                isCaretakerNotification: true,                 //indicates this is caretaker alert
-                                                seniorName: seniorName
-                                            )
-                                            
-                                        }
-                                    }
-                                        
-                                    
+                                    // Caretaker: save to senior and self
+                                    firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [activeUID])
+                                    firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [Auth.auth().currentUser?.uid ?? ""])
                                 } else {
-                                    //SENIOR CREATING A REMINDER
-
-                                    // Step 7a: Save reminder in senior's Firestore collection
-                                    firestoreManager.setReminder(
-                                        reminderID: reminderID,
-                                        reminder: reminder,
-                                        forUIDs: [activeUID]
-                                    )
-                                    // Step 7b: Fetch all caretakers linked to this senior
+                                    // Senior: save to self
+                                    firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [activeUID])
+                                    // Save to all linked caretakers
                                     firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-                                        // Step 7c: Get senior's preferred sound for notifications
-                                        firestoreManager.loadUserSettings(field: "selectedSound") { soundValue in
-                                            let soundType = (soundValue as? String) ?? "Chord"
-                                            // Step 7d: Fetch senior's first name
-                                            firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
-                                                guard let seniorName = seniorName else { return }
-                                                
-                                                // Step 7e: Schedule local notification for senior's device
-                                                setAlarm(
-                                                    dateAndTime: date,
-                                                    title: title,
-                                                    description: description,
-                                                    repeat_type: reminder.repeatSettings.repeat_type,
-                                                    repeat_until_date: reminder.repeatSettings.repeat_until_date,
-                                                    repeatIntervals: reminder.repeatSettings.repeatIntervals,
-                                                    reminderID: reminderID,
-                                                    soundType: soundType,
-                                                    caretakerAlertDelay: caretakerAlertDelay,
-                                                    isCaretakerNotification: false,                    // for senior
-                                                    seniorName: seniorName
-                                                )
-                                                //Update reminder.author with senior's first name
-                                                reminder.author = seniorName
-                                                
-                                                // Step 7f: Schedule caretaker notifications for each linked caretaker
-                                                    //Store reminder in each caretaker's Firestore collection
-                                                for caretakerUID in caretakerUIDs {
-                                                    firestoreManager.setReminder(
-                                                        reminderID: reminderID,
-                                                        reminder: reminder,
-                                                        forUIDs: [caretakerUID]
-                                                    )
-                                                    
-                                                }
-                                            }
+                                        for caretakerUID in caretakerUIDs {
+                                            firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [caretakerUID])
                                         }
                                     }
                                 }
-                                
                                 presentationMode.wrappedValue.dismiss()
                             }
                         }
