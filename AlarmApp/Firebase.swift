@@ -237,18 +237,17 @@ class FirestoreManager: ObservableObject {
     }
     
     //Delete a reminder document (a whole reminder, with all the fields)
-    func deleteReminder(dateCreated: String, completion: ((Error?) -> Void)? = nil) {
-        if Auth.auth().currentUser != nil {
-            db.collection("users").document(activeUserUID).collection("reminders").document(dateCreated).delete { error in
-                if let error = error {
-                    print("Error deleting reminder: \(error)")
-                } else {
-                    print("Reminder deleted successfully")
-                    print(dateCreated)
-                }
-                completion?(error)
+    func deleteReminder(dateCreated: String, userID: String, completion: ((Error?) -> Void)? = nil) {
+        db.collection("users").document(userID).collection("reminders").document(dateCreated).delete { error in
+            if let error = error {
+                print("Error deleting reminder: \(error)")
+            } else {
+                print("Reminder deleted successfully")
+                print(dateCreated)
             }
+            completion?(error)
         }
+        
     }
 
     

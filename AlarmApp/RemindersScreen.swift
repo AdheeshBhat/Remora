@@ -701,7 +701,17 @@ struct ReminderRow: View {
                                 } else {
                                     // For non-repeating reminders, delete immediately
                                     cancelAlarm(reminderID: documentID)
-                                    firestoreManager.deleteReminder(dateCreated: documentID)
+                                    let activeUID = firestoreManager.activeUserUID
+                                    firestoreManager.deleteReminder(dateCreated: documentID, userID: activeUID)
+                                    firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                        for caretakerUID in caretakerUIDs {
+                                            firestoreManager.deleteReminder(dateCreated: documentID, userID: caretakerUID)
+                                        }
+                                    }
+                                    
+                                                
+                                                
+                                                
                                     onUpdate?()
                                 }
                             }
@@ -736,7 +746,14 @@ struct ReminderRow: View {
                                 } else {
                                     NotificationManager.shared.cancelForeverAlarm(reminderID: documentID)
                                 }
-                                firestoreManager.deleteReminder(dateCreated: documentID)
+                                let activeUID = firestoreManager.activeUserUID
+                                firestoreManager.deleteReminder(dateCreated: documentID, userID: activeUID)
+                                firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                    for caretakerUID in caretakerUIDs {
+                                        firestoreManager.deleteReminder(dateCreated: documentID, userID: caretakerUID)
+                                    }
+                                }
+                                
                                 onUpdate?()
                             }
                             Button("Cancel", role: .cancel) {}

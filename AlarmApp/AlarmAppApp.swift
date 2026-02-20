@@ -12,6 +12,7 @@ import UserNotifications
 
 @main
 struct AlarmAppApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     // Observes the current lifecycle state of the app (active, background, inactive)
     @Environment(\.scenePhase) private var scenePhase
     // Global appearance settings (dark/light mode, calendar defaults)
@@ -96,7 +97,7 @@ struct AlarmAppApp: App {
                 
                 for change in snapshot.documentChanges {
                     if change.type == .added  || change.type == .modified { // Only care about newly added reminders or edited
-                        print("LISTENER TRIGGERED")
+
                         let data = change.document.data()
                         let documentID = change.document.documentID
                         
@@ -169,6 +170,20 @@ struct AlarmAppApp: App {
                     }
                 }
             }
+    }
+}
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Messaging.messaging().apnsToken = deviceToken
+        print("APNs token registered.")
+    }
+    
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("Failed to register for APNs: \(error)")
     }
 }
 

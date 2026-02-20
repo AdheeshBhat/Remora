@@ -11,15 +11,15 @@ import FirebaseFirestore
 import FirebaseAuth
 
 
-class AppDelegate: NSObject, UIApplicationDelegate {
-  func application(_ application: UIApplication,
-                   didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
-    FirebaseApp.configure()
-    //let db = Firestore.firestore()
-    print("Firebase and Firestore initialized for SwiftUI!")
-    return true
-  }
-}
+//class AppDelegate: NSObject, UIApplicationDelegate {
+//  func application(_ application: UIApplication,
+//                   didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+//    FirebaseApp.configure()
+//    //let db = Firestore.firestore()
+//    print("Firebase and Firestore initialized for SwiftUI!")
+//    return true
+//  }
+//}
 
 //create functions for all texts on the screen (ex. one function for "welcome and date")
 enum Screen {
@@ -28,7 +28,7 @@ enum Screen {
 
 
 struct ContentView: View {
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    //@UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @Environment(\.presentationMode) private var
         presentationMode: Binding<PresentationMode>
     @State public var cur_screen: Screen = .HomeScreen
