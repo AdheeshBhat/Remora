@@ -2,7 +2,6 @@
 //  PushNotificationManager.swift
 //  AlarmApp
 //
-//
 
 import Foundation
 import FirebaseMessaging
@@ -28,22 +27,17 @@ class PushNotificationManager: NSObject, ObservableObject {
         }
     }
     
+    // Remove all token fetching calls on init; use AppDelegate callback only
     func storeFCMToken(for userUID: String) {
+        // Optional manual store
         Messaging.messaging().token { token, error in
-            if let error = error {
-                print("Error fetching FCM registration token: \(error)")
-            } else if let token = token {
-                print("FCM registration token: \(token)")
-                // Store token in Firestore for this user
-                FirestoreManager().storeFCMToken(token: token, for: userUID)
-            }
+            if let token = token { FirestoreManager().storeFCMToken(token: token, for: userUID) }
         }
     }
     
     func sendPushNotification(to userUID: String, title: String, body: String, reminderID: String) {
         FirestoreManager().getFCMToken(for: userUID) { token in
             guard let token = token else { return }
-            // Trigger Cloud Function or send via FCM API
             print("Would send push to token \(token): \(title)")
         }
     }
@@ -57,9 +51,6 @@ extension PushNotificationManager: MessagingDelegate {
         let currentUID = FirestoreManager().activeUserUID
         if !currentUID.isEmpty {
             FirestoreManager().storeFCMToken(token: fcmToken, for: currentUID)
-        } else {
-            print("No active user UID found; skipping FCM token storage.")
         }
     }
 }
-

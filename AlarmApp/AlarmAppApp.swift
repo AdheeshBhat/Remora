@@ -9,46 +9,42 @@ import FirebaseFirestore
 import FirebaseAuth
 import FirebaseMessaging
 import UserNotifications
+import FirebaseAppCheck
 
 @main
 struct AlarmAppApp: App {
-    // Observes the current lifecycle state of the app (active, background, inactive)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     @Environment(\.scenePhase) private var scenePhase
-    // Global appearance settings (dark/light mode, calendar defaults)
     @StateObject private var appearance: AppearanceModel
-    // Firebase Auth listener handle to detach listener when needed
     @State private var authHandle: AuthStateDidChangeListenerHandle?
-
+    
     init() {
-        FirebaseApp.configure()
-
         let appearanceModel = AppearanceModel()
         _appearance = StateObject(wrappedValue: appearanceModel)
-        
-        setupNotificationDelegate() // Assign UNUserNotificationCenter delegate
-        setupPushNotifications()    // Request push notifications permission & register
+        setupNotificationDelegate() // Ensure delegate assigned early
     }
-
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appearance)
-                .preferredColorScheme(
-                    appearance.useLightMode ? .light : .dark
-                )
+                .preferredColorScheme(appearance.useLightMode ? .light : .dark)
                 .onAppear {
                     setupAuthListener()
+                    // Only register for push notifications after user login
+                    if Auth.auth().currentUser != nil {
+                        PushNotificationManager.shared.registerForPushNotifications()
+                    }
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                print("App became active")
-            }
+            if newPhase == .active { print("App became active") }
         }
     }
     
     private func setupAuthListener() {
-        authHandle = Auth.auth().addStateDidChangeListener { [self] _, user in
+        authHandle = Auth.auth().addStateDidChangeListener { _, user in
             if user != nil {
                 let loader = FirestoreManager()
                 appearance.loadFromFirebase(firestoreManager: loader)
@@ -60,31 +56,23 @@ struct AlarmAppApp: App {
             }
         }
     }
-
+    
     private func setupNotificationDelegate() {
         UNUserNotificationCenter.current().delegate = AppNotificationDelegate.shared
-        // Ensures app can handle notifications while in foreground or background
-    }
-    
-    private func setupPushNotifications() {
-        PushNotificationManager.shared.registerForPushNotifications()
     }
 }
 
 final class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = AppNotificationDelegate()
-
-    // Called when a notification is delivered while the app is in foreground
+    
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
-        withCompletionHandler completionHandler:
-        @escaping (UNNotificationPresentationOptions) -> Void
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound, .badge])
     }
-
-    // Called when user taps a notification
+    
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -94,4 +82,3 @@ final class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate 
         completionHandler()
     }
 }
-
