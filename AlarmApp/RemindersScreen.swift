@@ -526,7 +526,7 @@ struct ReminderRow: View {
                     .font(.title2)
                     .lineLimit(2)
                 HStack(spacing: 12) {
-                    //DONE BUTTON
+                    //DONE BUTTON (MARK AS COMPLETE)
                     Button(action: {
                         let repeatSettings = curReminderData["repeatSettings"] as? [String: Any]
                         let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
@@ -701,7 +701,7 @@ struct ReminderRow: View {
                                 } else {
                                     // For non-repeating reminders, delete immediately
                                     cancelAlarm(reminderID: documentID)
-                                    firestoreManager.deleteReminder(dateCreated: documentID)
+                                    firestoreManager.deleteReminder(reminderID: documentID)
                                     onUpdate?()
                                 }
                             }
@@ -736,7 +736,7 @@ struct ReminderRow: View {
                                 } else {
                                     NotificationManager.shared.cancelForeverAlarm(reminderID: documentID)
                                 }
-                                firestoreManager.deleteReminder(dateCreated: documentID)
+                                firestoreManager.deleteReminder(reminderID: documentID)
                                 onUpdate?()
                             }
                             Button("Cancel", role: .cancel) {}

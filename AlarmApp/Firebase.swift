@@ -237,16 +237,60 @@ class FirestoreManager: ObservableObject {
     }
     
     //Delete a reminder document (a whole reminder, with all the fields)
-    func deleteReminder(dateCreated: String, completion: ((Error?) -> Void)? = nil) {
-        if Auth.auth().currentUser != nil {
-            db.collection("users").document(activeUserUID).collection("reminders").document(dateCreated).delete { error in
-                if let error = error {
-                    print("Error deleting reminder: \(error)")
-                } else {
-                    print("Reminder deleted successfully")
-                    print(dateCreated)
+    func deleteReminder(reminderID: String, completion: ((Bool) -> Void)? = nil) {
+        
+        let activeUID: String = Auth.auth().currentUser?.uid ?? ""
+        
+        checkIfCaretaker { isCaretaker in
+            
+            if isCaretaker {
+                
+                // caretaker deleting → remove from caretaker + the senior currently being viewed
+                // currentUID represents the senior whose reminders the caretaker is currently viewing
+                let seniorUID = self.currentUID ?? ""
+                let uids = [activeUID, seniorUID]
+                // DispatchGroup lets us wait until all firestore deletions finish before calling the completion handler
+                let group = DispatchGroup()
+                
+                for uid in uids {
+                    group.enter()
+                    
+                    self.db.collection("users")
+                        .document(uid)
+                        .collection("reminders")
+                        .document(reminderID)
+                        .delete { _ in
+                            group.leave()
+                        }
                 }
-                completion?(error)
+                
+                group.notify(queue: .main) {
+                    completion?(true)
+                }
+            } else {
+                
+                // senior deleting → remove from self + all caretakers
+                self.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                    
+                    let allUIDs = [activeUID] + caretakerUIDs
+                    let group = DispatchGroup()
+                    
+                    for uid in allUIDs {
+                        group.enter()
+                        
+                        self.db.collection("users")
+                            .document(uid)
+                            .collection("reminders")
+                            .document(reminderID)
+                            .delete { _ in
+                                group.leave()
+                            }
+                    }
+                    
+                    group.notify(queue: .main) {
+                        completion?(true)
+                    }
+                }
             }
         }
     }

@@ -28,7 +28,7 @@ exports.scheduleReminderNotification =
 
           if (!change.after.exists ||
               change.after.data().isComplete) {
-            await cancelScheduledNotifications(reminderId);
+            await cancelScheduledNotifications(userId, reminderId);
             return null;
           }
 
@@ -50,14 +50,19 @@ exports.scheduleReminderNotification =
           const repeatIntervals =
               repeatSettings.repeatIntervals;
 
-          await cancelScheduledNotifications(reminderId);
-
           const userDoc = await admin.firestore()
               .collection("users")
               .doc(userId)
               .get();
 
           const userData = userDoc.data();
+
+          // If this document belongs to a caretaker,
+          // do NOT schedule notifications from here.
+          // Senior documents handle scheduling for both senior + caretakers.
+          if (userData.isCaretaker) {
+            return null;
+          }
 
           const occurrences = generateOccurrences(
               date.toDate(),
@@ -72,46 +77,78 @@ exports.scheduleReminderNotification =
 
             if (delay < 0) continue;
 
+              // for delay and occurrenceDate, drop the second
+              // Force notifications to trigger exactly at :00 seconds
+              occurrenceDate.setSeconds(0);
+              occurrenceDate.setMilliseconds(0);
               
-              // Add if statement and schedule as below if senior, but if caretaker, modify title + description (body) to be `🚨 ${author || "Senior"}'s Reminder` and `"${title}" is not finished yet.`
-            await scheduleNotification(
-                userId,
-                title,
-                description,
-                delay,
-                reminderId,
-                occurrenceDate,
-            );
+              // Schedule senior reminder
+              if (!userData.isCaretaker) {
+                  await scheduleNotification(
+                      userId,
+                      title,
+                      description,
+                      delay,
+                      reminderId,
+                      occurrenceDate,
+                  );
+                  
+                  // Schedule follow-up notification for the senior
+                  const followUpDelay = delay +
+                      ((caretakerAlertDelay || (DEFAULT_CARETAKER_DELAY_MS / 1000)) * 1000) / 2;
 
-            
+                  const followUpTitle = `Reminder: "${title}"`;
+
+                  const delaySeconds =
+                      caretakerAlertDelay ||
+                      (DEFAULT_CARETAKER_DELAY_MS / 1000);
+
+                  const minutesRemaining =
+                      Math.round(delaySeconds / 120); // (delay / 2) converted to minutes
+
+                  const followUpBody =
+                      `Make sure to mark "${title}" as done! Caretaker alert in ${minutesRemaining} min`;
+
+                  await scheduleNotification(
+                      userId,
+                      followUpTitle,
+                      followUpBody,
+                      followUpDelay,
+                      `${reminderId}-follow-up`,
+                      occurrenceDate,
+                  );
+                  
+              }
+        
+              // If this user is a senior and has linked caretakers,
+              // schedule delayed notifications for each linked caretaker
+              if (!userData.isCaretaker &&
+                  Array.isArray(userData.LinkedCaretakers) &&
+                  userData.LinkedCaretakers.length > 0) {
+
+                const caretakerDelay =
+                    delay +
+                    ((caretakerAlertDelay || 0) * 1000 ||
+                     DEFAULT_CARETAKER_DELAY_MS);
+
+                const caretakerTitle =
+                    `🚨 ${author || "Senior"}'s Reminder`;
+
+                const caretakerBody =
+                    `"${title}" is not finished yet.`;
+
+                for (const caretakerId of userData.LinkedCaretakers) {
+                  await scheduleNotification(
+                      caretakerId,
+                      caretakerTitle,
+                      caretakerBody,
+                      caretakerDelay,
+                      reminderId,
+                      occurrenceDate,
+                  );
+                }
+              }
               
-            // checking if current user is a senior and has linkedCaretakers
-//            if (!userData.isCaretaker &&
-//                userData.LinkedCaretakers) {
-//              const caretakerDelay =
-//                  delay +
-//                  (caretakerAlertDelay ||
-//                  DEFAULT_CARETAKER_DELAY_MS);
-//
-//              const caretakerTitle =
-//                  `🚨 ${author || "Senior"}'s Reminder`;
-//
-//              const caretakerBody =
-//                  `"${title}" is not finished yet.`;
-//
-//                // looping over every caretaker in LinkedCaretakers for the senior and calling scheduleNotification
-//              for (const caretakerId of
-//                userData.LinkedCaretakers) {
-//                await scheduleNotification(
-//                    caretakerId,
-//                    caretakerTitle,
-//                    caretakerBody,
-//                    caretakerDelay,
-//                    reminderId,
-//                    occurrenceDate,
-//                );
-//              }
-//            }
           }
 
           return null;
@@ -384,6 +421,9 @@ async function scheduleNotification(
 
   if (!fcmToken) return;
 
+  const rawScheduled = Date.now() + delay;
+  const roundedScheduled = Math.floor(rawScheduled / 60000) * 60000;
+
   await admin.firestore()
       .collection("scheduledNotifications")
       .add({
@@ -397,9 +437,7 @@ async function scheduleNotification(
                 .fromDate(occurrenceDate),
         scheduledTime:
             admin.firestore.Timestamp
-                .fromMillis(
-                    Date.now() + delay,
-                ),
+                .fromMillis(roundedScheduled),
       });
 }
 
@@ -407,21 +445,25 @@ async function scheduleNotification(
  * Cancels scheduled notifications.
  */
 async function cancelScheduledNotifications(
+    userId,
     reminderId,
 ) {
+    
+    // Cancel the follow-up reminder for seniors here with new identifier "reminderId-follow-up"
   const snapshot = await admin.firestore()
       .collection("scheduledNotifications")
-      .where(
-          "reminderId",
-          "==",
-          reminderId,
-      )
+      .where("userId", "==", userId)
       .get();
+
+  const docsToDelete = snapshot.docs.filter((doc) => {
+    const rid = doc.data().reminderId;
+    return rid === reminderId || rid === `${reminderId}-follow-up`;
+  });
 
   const batch =
       admin.firestore().batch();
 
-  snapshot.docs.forEach((doc) => {
+  docsToDelete.forEach((doc) => {
     batch.delete(doc.ref);
   });
 
