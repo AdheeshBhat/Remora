@@ -242,34 +242,15 @@ struct EditReminderScreen: View {
                         ]
                         
                         // Update for all relevant users (senior + caretakers)
-                        let activeUID = firestoreManager.activeUserUID
-                        firestoreManager.checkIfCaretaker { isCaretaker in
-                            if isCaretaker {
-                                let seniorUID = reminderOwnerUID.isEmpty ? activeUID : reminderOwnerUID
-                                firestoreManager.updateReminderFields(
-                                    dateCreated: reminderID,
-                                    fields: fields,
-                                    forUIDs: [seniorUID, activeUID]
-                                ) { success in
-                                    if success {
-                                        DispatchQueue.main.async { onUpdate?() }
-                                    }
-                                }
-                            } else {
-                                firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-                                    let allUIDs = [activeUID] + caretakerUIDs
-                                    firestoreManager.updateReminderFields(
-                                        dateCreated: reminderID,
-                                        fields: fields,
-                                        forUIDs: allUIDs
-                                    ) { success in
-                                        if success {
-                                            DispatchQueue.main.async { onUpdate?() }
-                                        }
-                                    }
-                                }
+                        firestoreManager.updateReminderFields(
+                            dateCreated: reminderID,
+                            fields: fields
+                        ) { success in
+                            if success {
+                                DispatchQueue.main.async { onUpdate?() }
                             }
                         }
+                
                         presentationMode.wrappedValue.dismiss()
                     }) {
                         Text("Save Changes")

@@ -197,21 +197,77 @@ class FirestoreManager: ObservableObject {
             }
     }
     
+    
+    func checkIfCaretaker(completion: @escaping (Bool) -> Void) {
+        guard let currentUser = Auth.auth().currentUser else {
+            completion(false)
+            return
+        }
+
+        let userRef = db.collection("users").document(currentUser.uid)
+        userRef.getDocument { document, error in
+            if let error = error {
+                print("Error checking caretaker status: \(error)")
+                completion(false)
+                return
+            }
+
+            if let document = document, document.exists {
+                let isCaretaker = document.data()?["isCaretaker"] as? Bool ?? false
+                completion(isCaretaker)
+            } else {
+                completion(false)
+            }
+        }
+    }
 
     // Update specific fields of a reminder
-    func updateReminderFields(dateCreated: String, fields: [String: Any], forUIDs: [String]? = nil, completion: @escaping (Bool) -> Void = { _ in }) {
-        let targetUIDs = forUIDs ?? [activeUserUID]
-        if targetUIDs.isEmpty { completion(false); return }
+    func updateReminderFields(dateCreated: String, fields: [String: Any], completion: @escaping (Bool) -> Void = { _ in }) {
+        // activeUID is always the seniorUID
+        let activeUID = self.activeUserUID
+        
+        self.checkIfCaretaker { isCaretaker in
+            if isCaretaker {
+                let caretakerUID = Auth.auth().currentUser?.uid ?? ""
+                let UIDsToUpdate = [caretakerUID, activeUID]
+                self.performReminderUpdate(uids: UIDsToUpdate, dateCreated: dateCreated, fields: fields, completion: completion)
+
+            } else {
+                self.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                    let UIDsToUpdate = [activeUID] + caretakerUIDs
+                    print("UIDsToUpdate: \(UIDsToUpdate)")
+                    self.performReminderUpdate(uids: UIDsToUpdate, dateCreated: dateCreated, fields: fields, completion: completion)
+                }
+            }
+        }
+    }
+    
+    private func performReminderUpdate(
+        uids: [String],
+        dateCreated: String,
+        fields: [String: Any],
+        completion: @escaping (Bool) -> Void
+    ) {
+
+        if uids.isEmpty {
+            completion(false)
+            return
+        }
 
         let dispatchGroup = DispatchGroup()
         var success = true
 
-        for uid in targetUIDs {
+        for uid in uids {
             dispatchGroup.enter()
-            let docRef = db.collection("users").document(uid).collection("reminders").document(dateCreated)
+
+            let docRef = db.collection("users")
+                .document(uid)
+                .collection("reminders")
+                .document(dateCreated)
+
             docRef.updateData(fields) { error in
                 if let error = error {
-                    print("Update failed for uid \(uid): \(error)")
+                    print("Update failed for \(uid): \(error)")
                     success = false
                 }
                 dispatchGroup.leave()
@@ -542,28 +598,6 @@ class FirestoreManager: ObservableObject {
             // check caretaker, username mapping, get UID, link senior, fetch linked seniors, unlink senior
 //-----------------------------------------------------------------------------------------------------------------------------------------------------------
     
-    func checkIfCaretaker(completion: @escaping (Bool) -> Void) {
-        guard let currentUser = Auth.auth().currentUser else {
-            completion(false)
-            return
-        }
-
-        let userRef = db.collection("users").document(currentUser.uid)
-        userRef.getDocument { document, error in
-            if let error = error {
-                print("Error checking caretaker status: \(error)")
-                completion(false)
-                return
-            }
-
-            if let document = document, document.exists {
-                let isCaretaker = document.data()?["isCaretaker"] as? Bool ?? false
-                completion(isCaretaker)
-            } else {
-                completion(false)
-            }
-        }
-    }
     
     // Saves a username-to-UID mapping when user registers
     func saveUsernameMapping(username: String, uid: String, completion: ((Error?) -> Void)? = nil) {

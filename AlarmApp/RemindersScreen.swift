@@ -296,6 +296,7 @@ struct RemindersScreen: View {
                                 firestoreManager: firestoreManager,
                                 userData: visibleReminders,
                                 onUpdate: loadReminders
+                                //onDelete: deleteReminder
                             )
                             if isRemindersEmpty(for: filterPeriod, filteredDay: calculateDateFor(), reminders: remindersForUser) {
                                 Text("No reminders for this period.")
@@ -481,6 +482,9 @@ struct RemindersScreen: View {
         }
     }
     
+    // private func deleteReminders(reminderID: ) { }
+    //  delete the passed in reminder from remindersForUser list (used to locally display reminders before database is updated)
+    
 } //struct ending
 
 
@@ -547,7 +551,7 @@ struct ReminderRow: View {
                                 fields: ["isComplete": true]
                             )
                             self.curReminderData["isComplete"] = true
-                            cancelAlarm(reminderID: documentID)
+                            //cancelAlarm(reminderID: documentID)
                         } else {
                             if isInstanceComplete {
                                 showConfirmation = true
@@ -573,10 +577,10 @@ struct ReminderRow: View {
                                     to: dateKey
                                 ).day ?? 0
 
-                                cancelSingleAlarmInstance(
-                                    reminderID: documentID,
-                                    instanceIndex: instanceIndex
-                                )
+//                                cancelSingleAlarmInstance(
+//                                    reminderID: documentID,
+//                                    instanceIndex: instanceIndex
+//                                )
 
                                 // Do NOT call loadReminders() here — local state update drives UI change
                                 onUpdate?()
@@ -700,7 +704,7 @@ struct ReminderRow: View {
                                     showDeleteInstanceChoice = true
                                 } else {
                                     // For non-repeating reminders, delete immediately
-                                    cancelAlarm(reminderID: documentID)
+                                    //cancelAlarm(reminderID: documentID)
                                     firestoreManager.deleteReminder(reminderID: documentID)
                                     onUpdate?()
                                 }
@@ -720,10 +724,10 @@ struct ReminderRow: View {
                                 let calendar = Calendar.current
                                 let instanceIndex = calendar.dateComponents([.day], from: reminderStartDate, to: dateKey).day ?? 0
 
-                                cancelSingleAlarmInstance(
-                                    reminderID: documentID,
-                                    instanceIndex: instanceIndex
-                                )
+//                                cancelSingleAlarmInstance(
+//                                    reminderID: documentID,
+//                                    instanceIndex: instanceIndex
+//                                )
 
                                 onUpdate?()
                             }
@@ -732,7 +736,7 @@ struct ReminderRow: View {
                                 let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
                                 let repeatUntil = repeatSettings?["repeat_until_date"] as? String ?? "None"
                                 if repeatType != "None" && repeatUntil != "Forever" {
-                                    cancelAlarm(reminderID: documentID)
+                                    //cancelAlarm(reminderID: documentID)
                                 } else {
                                     NotificationManager.shared.cancelForeverAlarm(reminderID: documentID)
                                 }

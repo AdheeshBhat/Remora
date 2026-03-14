@@ -75,109 +75,6 @@ func filterRemindersForMonth(userData: [Date: ReminderData], filteredDay: Date?,
     }
 }
 
-//--------------------------------------------------------------- 1
-
-//NOT CALLED ANYWHERE
-//Returns reminders based on day, week, or month filter
-//func showAllReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = false, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [Date: ReminderData]) -> some View {
-//    //let userData = database.wrappedValue.users[userID] ?? [:]
-//    
-//    let filteredUserData: [Date: ReminderData]
-//    if period == "today" {
-//        filteredUserData = filterRemindersForToday(userData: userData, filteredDay: filteredDay)
-//    } else if period == "week" {
-//        filteredUserData = filterRemindersForWeek(userData: userData, filteredDay: filteredDay)
-//    } else if period == "month" {
-//        filteredUserData = filterRemindersForMonth(userData: userData, filteredDay: filteredDay)
-//    } else {
-//        filteredUserData = userData
-//    }
-//    
-//    let dateFormatter = DateFormatter()
-//        //can change to .short, .medium, or .long format
-//        dateFormatter.dateStyle = .medium
-//        dateFormatter.timeStyle = .short
-//    
-//    return VStack {
-//        ForEach(filteredUserData.keys.sorted(), id: \.self) { date in
-//            if let reminder = filteredUserData[date] {
-//                HStack {
-//                    ReminderRow(
-//                        cur_screen: cur_screen,
-//                        title: getTitle(reminder: reminder),
-//                        time: getTimeFromReminder(reminder: reminder),
-//                        reminderDate: getDayFromReminder(reminder: reminder),
-//                        reminder: reminder,
-//                        showEditButton: showEditButton,
-//                        showDeleteButton: showDeleteButton,
-//                        userID: userID,
-//                        dateKey: date,
-//                        documentID: createExactStringFromDate(date: date),
-//                        firestoreManager: firestoreManager,
-//                        onUpdate: nil
-//                    )
-//                    
-//                    //Show past reminders that have already been completed
-//                    
-//                } //HStack ending
-//                //.padding()
-//            }// if statement ending
-//        } //ForEach() ending
-//    }
-//
-//}
-
-//----------------------------------------------------------------- 2
-
-////NOT CALLED ANYWHERE
-//func showIncompleteReminders(userID: Int, period: String, cur_screen: Binding<Screen>, showEditButton: Bool = false, showDeleteButton: Bool = false, filteredDay: Date?, firestoreManager: FirestoreManager, userData: [Date: ReminderData]) -> some View {
-//    //let userData = database.wrappedValue.users[userID] ?? [:]
-//    
-//    let filteredUserData: [Date: ReminderData]
-//    if period == "today" {
-//        filteredUserData = filterRemindersForToday(userData: userData, filteredDay: filteredDay)
-//    } else if period == "week" {
-//        filteredUserData = filterRemindersForWeek(userData: userData, filteredDay: filteredDay)
-//    } else if period == "month" {
-//        filteredUserData = filterRemindersForMonth(userData: userData, filteredDay: filteredDay)
-//    } else {
-//        filteredUserData = userData
-//    }
-//    
-//    let dateFormatter = DateFormatter()
-//        //can change to .short, .medium, or .long format
-//        dateFormatter.dateStyle = .medium
-//        dateFormatter.timeStyle = .short
-//
-//    //let incompleteReminders = filteredUserData.filter { $0.value.isComplete != true }
-//
-//    return VStack {
-//        ForEach(filteredUserData.keys.sorted(), id: \.self) { date in
-//            if let reminder = filteredUserData[date], reminder.isComplete != true {
-//                HStack {
-//
-//                    ReminderRow(
-//                        cur_screen: cur_screen,
-//                        title: getTitle(reminder: reminder),
-//                        time: getTimeFromReminder(reminder: reminder),
-//                        reminderDate: getDayFromReminder(reminder: reminder),
-//                        reminder: reminder,
-//                        showEditButton: showEditButton,
-//                        showDeleteButton: showDeleteButton,
-//                        userID: userID,
-//                        dateKey: date,
-//                        documentID: createExactStringFromDate(date: date),
-//                        firestoreManager: firestoreManager,
-//                        onUpdate: nil
-//                    ) //ReminderRow ending
-//                } //HStack ending
-//                //.padding()
-//            } // if statement ending
-//        } //ForEach() ending
-//    }
-//}
-
-
 //----------------------------------------------------------------- 3
 
 func dayHeader(from date: Date) -> String {
@@ -524,7 +421,6 @@ func expandRepeatingRemindersForCalendar(userData: [String: ReminderData], start
                 if currentDate > endDate { break }
                 if currentDate >= startDate {
                     let isDeleted = reminder.deletedInstances.contains { Calendar.current.isDate($0, inSameDayAs: currentDate) }
-                    let isCompleted = reminder.completedInstances.contains{ Calendar.current.isDate($0, inSameDayAs: currentDate) }
                     if !isDeleted {
                         var instanceReminder = reminder
                         instanceReminder.date = currentDate

@@ -26,12 +26,19 @@ exports.scheduleReminderNotification =
         .onWrite(async (change, context) => {
           const {userId, reminderId} = context.params;
 
+            //reminder does NOT exist after the change OR it's complete -> cancel it
           if (!change.after.exists ||
               change.after.data().isComplete) {
             await cancelScheduledNotifications(userId, reminderId);
             return null;
           }
 
+            // If the reminder existed before this write, it means the reminder is being edited. Cancel any previously scheduled notifications
+            if (change.before.exists && change.after.exists) {
+              await cancelScheduledNotifications(userId, reminderId);
+            }
+
+            
           const reminder = change.after.data();
 
           const {

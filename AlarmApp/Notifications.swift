@@ -290,43 +290,43 @@ func calculateNextDateForPattern(pattern: String, from baseDate: Date) -> Date? 
 
 
 
-func cancelAlarm(reminderID: String) {
-    let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
-    
-    var identifiersToCancel: [String] = []
-    
-    // Cancel main notifications
-    identifiersToCancel.append(baseIdentifier)
-    for i in 0..<100 {
-        identifiersToCancel.append("\(baseIdentifier)-\(i)-senior")
-        identifiersToCancel.append("\(baseIdentifier)-\(i)-caretaker")
-    }
-    
-    // Cancel follow-up notifications
-    for i in 0..<100 {
-        identifiersToCancel.append("\(baseIdentifier)-followup-\(i)")
-        identifiersToCancel.append("\(baseIdentifier)-followup-\(i)-senior")
-    }
-    
-    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
-    print("Cancelled ALL notifications (senior: main + follow-up, caretaker) with base ID: \(baseIdentifier)")
-}
+//func cancelAlarm(reminderID: String) {
+//    let baseIdentifier = createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID))
+//    
+//    var identifiersToCancel: [String] = []
+//    
+//    // Cancel main notifications
+//    identifiersToCancel.append(baseIdentifier)
+//    for i in 0..<100 {
+//        identifiersToCancel.append("\(baseIdentifier)-\(i)-senior")
+//        identifiersToCancel.append("\(baseIdentifier)-\(i)-caretaker")
+//    }
+//    
+//    // Cancel follow-up notifications
+//    for i in 0..<100 {
+//        identifiersToCancel.append("\(baseIdentifier)-followup-\(i)")
+//        identifiersToCancel.append("\(baseIdentifier)-followup-\(i)-senior")
+//    }
+//    
+//    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
+//    print("Cancelled ALL notifications (senior: main + follow-up, caretaker) with base ID: \(baseIdentifier)")
+//}
 
-func cancelSingleAlarmInstance(reminderID: String, instanceIndex: Int) {
-    let baseIdentifier = createUniqueIDFromDate(
-        date: createExactDateFromString(dateString: reminderID)
-    )
-
-    let identifiers = [
-        "\(baseIdentifier)-\(instanceIndex)-senior",
-        "\(baseIdentifier)-\(instanceIndex)-caretaker",
-        "\(baseIdentifier)-followup-\(instanceIndex)",
-        "\(baseIdentifier)-followup-\(instanceIndex)-senior"
-    ]
-    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
-
-    print("Cancelled single alarm instance: \(instanceIndex) and follow-up for senior + caretaker")
-}
+//func cancelSingleAlarmInstance(reminderID: String, instanceIndex: Int) {
+//    let baseIdentifier = createUniqueIDFromDate(
+//        date: createExactDateFromString(dateString: reminderID)
+//    )
+//
+//    let identifiers = [
+//        "\(baseIdentifier)-\(instanceIndex)-senior",
+//        "\(baseIdentifier)-\(instanceIndex)-caretaker",
+//        "\(baseIdentifier)-followup-\(instanceIndex)",
+//        "\(baseIdentifier)-followup-\(instanceIndex)-senior"
+//    ]
+//    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
+//
+//    print("Cancelled single alarm instance: \(instanceIndex) and follow-up for senior + caretaker")
+//}
 
 
 func cancelAllNotificationsForCurrentUser() {
