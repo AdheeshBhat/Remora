@@ -197,6 +197,24 @@ class FirestoreManager: ObservableObject {
             }
     }
     
+    func getRemindersForMultipleUsers(uids: [String], completion: @escaping ([String: [String: ReminderData]]) -> Void) {
+        var results: [String: [String: ReminderData]] = [:]
+        let group = DispatchGroup()
+
+        for uid in uids {
+            group.enter()
+
+            getRemindersForUser(uid: uid) { reminders in
+                results[uid] = reminders ?? [:]
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) {
+            completion(results)
+        }
+    }
+    
     
     func checkIfCaretaker(completion: @escaping (Bool) -> Void) {
         guard let currentUser = Auth.auth().currentUser else {

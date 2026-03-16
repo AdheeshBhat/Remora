@@ -577,12 +577,6 @@ struct ReminderRow: View {
                                     to: dateKey
                                 ).day ?? 0
 
-//                                cancelSingleAlarmInstance(
-//                                    reminderID: documentID,
-//                                    instanceIndex: instanceIndex
-//                                )
-
-                                // Do NOT call loadReminders() here — local state update drives UI change
                                 onUpdate?()
                             }
                             
