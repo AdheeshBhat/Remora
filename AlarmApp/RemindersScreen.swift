@@ -714,15 +714,6 @@ struct ReminderRow: View {
                                     fields: ["deletedInstances": FieldValue.arrayUnion([dateKey])]
                                 )
 
-                                let reminderStartDate = createExactDateFromString(dateString: documentID)
-                                let calendar = Calendar.current
-                                let instanceIndex = calendar.dateComponents([.day], from: reminderStartDate, to: dateKey).day ?? 0
-
-//                                cancelSingleAlarmInstance(
-//                                    reminderID: documentID,
-//                                    instanceIndex: instanceIndex
-//                                )
-
                                 onUpdate?()
                             }
                             Button("Delete All Occurrences", role: .destructive) {

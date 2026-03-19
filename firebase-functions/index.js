@@ -57,6 +57,17 @@ exports.scheduleReminderNotification =
           const repeatIntervals =
               repeatSettings.repeatIntervals;
 
+          const deletedInstances =
+              (reminder.deletedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+          const completedInstances =
+              (reminder.completedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+
+          const isSameDay = (d1, d2) => {
+            return d1.getFullYear() === d2.getFullYear() &&
+                   d1.getMonth() === d2.getMonth() &&
+                   d1.getDate() === d2.getDate();
+          };
+
           const userDoc = await admin.firestore()
               .collection("users")
               .doc(userId)
@@ -83,6 +94,16 @@ exports.scheduleReminderNotification =
                 occurrenceDate.getTime() - Date.now();
 
             if (delay < 0) continue;
+
+            // Skip deleted or completed instances
+            const isDeleted = deletedInstances.some(d => isSameDay(d, occurrenceDate));
+            const isCompleted = completedInstances.some(d => isSameDay(d, occurrenceDate));
+
+            if (isDeleted || isCompleted) {
+              console.log("⏭️ Skipping instance:", occurrenceDate.toISOString(), 
+                          isDeleted ? "DELETED" : "COMPLETED");
+              continue;
+            }
 
               // for delay and occurrenceDate, drop the second
               // Force notifications to trigger exactly at :00 seconds
@@ -174,27 +195,31 @@ function generateOccurrences(
     repeatUntil,
     repeatIntervals,
 ) {
-  const occurrences = [];
-  const now = new Date();
-  let currentDate = new Date(startDate);
+    const occurrences = [];
+    const now = new Date();
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    startDate.setSeconds(0);
+    startDate.setMilliseconds(0);
+    
+    let currentDate = new Date(startDate);
+    const endDate = parseEndDate(repeatUntil);
 
-  const endDate = parseEndDate(repeatUntil);
-
-  while (currentDate <= now) {
-    currentDate = getNextOccurrence(
-        currentDate,
-        repeatType,
-        repeatIntervals,
-    );
-    if (!currentDate) break;
-  }
+    while (currentDate <= now) {
+        currentDate = getNextOccurrence(
+            currentDate,
+            repeatType,
+            repeatIntervals,
+        );
+        if (!currentDate) break;
+    }
 
   let count = 0;
 
   while (count < MAX_OCCURRENCES &&
       currentDate) {
     if (endDate && currentDate > endDate) break;
-
+      console.log("📅 Occurrence generated:", currentDate.toISOString());
     occurrences.push(new Date(currentDate));
 
     currentDate = getNextOccurrence(
@@ -217,9 +242,9 @@ function parseEndDate(repeatUntil) {
       repeatUntil === "Forever") {
     return null;
   }
-
-  const endDate = new Date(repeatUntil);
-  endDate.setDate(endDate.getDate() + 1);
+    const [year,month,day] = repeatUntil.split("-").map(Number)
+  const endDate = new Date(year, (month - 1), day, 23, 59, 59, 999);
+    //console.log(endDate);
   return endDate;
 }
 
@@ -231,42 +256,43 @@ function getNextOccurrence(
     repeatType,
     repeatIntervals,
 ) {
-  const next = new Date(date);
+    const next = new Date(date);
+    next.setSeconds(0);
+    next.setMilliseconds(0);
+    switch (repeatType) {
+        case "None":
+            return null;
 
-  switch (repeatType) {
-    case "None":
-      return null;
+        case "Daily":
+            next.setDate(next.getDate() + 1);
+            return next;
 
-    case "Daily":
-      next.setDate(next.getDate() + 1);
-      return next;
+        case "Weekly":
+            next.setDate(next.getDate() + 7);
+            return next;
 
-    case "Weekly":
-      next.setDate(next.getDate() + 7);
-      return next;
+        case "Monthly":
+            next.setMonth(next.getMonth() + 1);
+            return next;
 
-    case "Monthly":
-      next.setMonth(next.getMonth() + 1);
-      return next;
+        case "Yearly":
+            next.setFullYear(next.getFullYear() + 1);
+            return next;
 
-    case "Yearly":
-      next.setFullYear(next.getFullYear() + 1);
-      return next;
+        case "Custom":
+            if (!repeatIntervals ||
+                !repeatIntervals.days) {
+                return null;
+            }
 
-    case "Custom":
-      if (!repeatIntervals ||
-          !repeatIntervals.days) {
-        return null;
-      }
+            return calculateNextCustomDate(
+                date,
+                repeatIntervals.days,
+            );
 
-      return calculateNextCustomDate(
-          date,
-          repeatIntervals.days,
-      );
-
-    default:
-      return null;
-  }
+        default:
+            return null;
+    }
 }
 
 /**
@@ -312,6 +338,8 @@ function findNextPatternOccurrence(
     hour,
     minute,
 ) {
+    baseDate.setSeconds(0);
+    baseDate.setMilliseconds(0);
   const parts = pattern.split(" ");
   if (parts.length !== 2) return null;
 
@@ -368,6 +396,8 @@ function findNthWeekdayInMonth(
     hour,
     minute,
 ) {
+    baseDate.setSeconds(0);
+    baseDate.setMilliseconds(0);
   const targetMonth = new Date(baseDate);
   targetMonth.setMonth(
       targetMonth.getMonth() +
