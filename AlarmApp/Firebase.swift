@@ -122,6 +122,7 @@ class FirestoreManager: ObservableObject {
                     let description = data["description"] as? String ?? ""
                     let priority = data["priority"] as? String ?? "Low"
                     let author = data["author"] as? String ?? "user"
+                    let creator = data["creator"] as? String ?? author
 
                     let isComplete = data["isComplete"] as? Bool ?? false
                     let isLocked = data["isLocked"] as? Bool ?? false
@@ -182,6 +183,7 @@ class FirestoreManager: ObservableObject {
                         priority: priority,
                         isComplete: isComplete,
                         author: author,
+                        creator: creator,
                         isLocked: isLocked,
                         caretakerAlertDelay: caretakerAlertDelay,
                         deletedInstances: deletedInstances,
@@ -492,6 +494,7 @@ class FirestoreManager: ObservableObject {
                     let description = data["description"] as? String ?? ""
                     let priority = data["priority"] as? String ?? "Low"
                     let author = data["author"] as? String ?? "user"
+                    let creator = data["creator"] as? String ?? author
                     let isComplete = data["isComplete"] as? Bool ?? false
                     let isLocked = data["isLocked"] as? Bool ?? false
                     let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
@@ -527,6 +530,7 @@ class FirestoreManager: ObservableObject {
                         priority: priority,
                         isComplete: isComplete,
                         author: author,
+                        creator: creator,
                         isLocked: isLocked,
                         caretakerAlertDelay: caretakerAlertDelay
                     )

@@ -237,41 +237,47 @@ struct CreateReminderScreen: View {
                         } else {
                             let reminderID = getExactStringFromCurrentDate()
                             let activeUID = firestoreManager.activeUserUID
+                            let creatorUID = Auth.auth().currentUser?.uid ?? ""
                             
                             firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
                                 guard let seniorName = seniorName else { return }
                                 
-                                let customRepeatType = customPatterns.isEmpty ? nil : CustomRepeatType(days: customPatterns.joined(separator: ","))
-                                let reminder = ReminderData(
-                                    ID: Int.random(in: 1000...9999),
-                                    date: date,
-                                    title: title,
-                                    description: description,
-                                    repeatSettings: RepeatSettings(repeat_type: repeat_setting, repeat_until_date: repeatUntil, repeatIntervals: customRepeatType),
-                                    priority: priority,
-                                    isComplete: false,
-                                    author: seniorName,
-                                    isLocked: isLocked,
-                                    caretakerAlertDelay: caretakerAlertDelay
-                                )
+                                firestoreManager.getUserFirstName(forUID: creatorUID) { creatorName in
+                                    guard let creatorName = creatorName else { return }
                                 
-                                
-                                firestoreManager.checkIfCaretaker { isCaretaker in
-                                    if isCaretaker {
-                                        // Caretaker: save to senior and self
-                                        firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [activeUID])
-                                        firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [Auth.auth().currentUser?.uid ?? ""])
-                                    } else {
-                                        // Senior: save to self
-                                        firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [activeUID])
-                                        // Save to all linked caretakers
-                                        firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-                                            for caretakerUID in caretakerUIDs {
-                                                firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [caretakerUID])
+                                    let customRepeatType = customPatterns.isEmpty ? nil : CustomRepeatType(days: customPatterns.joined(separator: ","))
+                                    let reminder = ReminderData(
+                                        ID: Int.random(in: 1000...9999),
+                                        date: date,
+                                        title: title,
+                                        description: description,
+                                        repeatSettings: RepeatSettings(repeat_type: repeat_setting, repeat_until_date: repeatUntil, repeatIntervals: customRepeatType),
+                                        priority: priority,
+                                        isComplete: false,
+                                        author: seniorName,
+                                        creator: creatorName,
+                                        isLocked: isLocked,
+                                        caretakerAlertDelay: caretakerAlertDelay
+                                    )
+                                    
+                                    
+                                    firestoreManager.checkIfCaretaker { isCaretaker in
+                                        if isCaretaker {
+                                            // Caretaker: save to senior and self
+                                            firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [activeUID])
+                                            firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [Auth.auth().currentUser?.uid ?? ""])
+                                        } else {
+                                            // Senior: save to self
+                                            firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [activeUID])
+                                            // Save to all linked caretakers
+                                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                                for caretakerUID in caretakerUIDs {
+                                                    firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [caretakerUID])
+                                                }
                                             }
                                         }
+                                        presentationMode.wrappedValue.dismiss()
                                     }
-                                    presentationMode.wrappedValue.dismiss()
                                 }
                             }
                         }

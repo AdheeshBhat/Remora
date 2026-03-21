@@ -20,225 +20,225 @@ func requestNotificationPermission() {
 }
 
 // Main function is to schedule local notifications for reminders
-func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String, caretakerAlertDelay: TimeInterval, forUIDs: [String]? = nil, isCaretakerNotification: Bool = false, seniorName: String? = nil) {
-    //  Debug print to see which reminder is being scheduled
-    print("setAlarm called for reminderID: \(reminderID), repeat_type: \(repeat_type), repeat_until_date: \(repeat_until_date), date: \(dateAndTime)")
-    
-    // Handle forever repeating alarms with NotificationManager
-    if repeat_until_date == "Forever" && repeat_type != "None" {
-        let reminder = ReminderData(
-            ID: 0,
-            date: dateAndTime,
-            title: title,
-            description: description,
-            repeatSettings: RepeatSettings(
-                repeat_type: repeat_type,
-                repeat_until_date: repeat_until_date,
-                repeatIntervals: repeatIntervals
-            ),
-            priority: "Low",
-            isComplete: false,
-            author: "user",
-            isLocked: false,
-            caretakerAlertDelay: caretakerAlertDelay
-        )
-        //scheduleForeverRepeatingAlarm handles infinit repeats
-        NotificationManager.shared.scheduleForeverRepeatingAlarm(reminder: reminder, reminderID: reminderID, isCaretakerNotification: isCaretakerNotification, seniorName: seniorName)
-        return
-    }
-    
-    // Create the main UNNotificationContent object
-    let content = UNMutableNotificationContent()
-
-    if isCaretakerNotification {
-        // Caretaker notifications include the senior's name and a special body
-        content.title = "🚨 \(seniorName ?? "Senior")'s Reminder"
-        content.body = "\"\(title)\" is not finished yet."
-        content.userInfo = [
-            "role": "caretaker",
-            "reminderID": reminderID,
-            "seniorName": seniorName ?? "",
-            "reminderTitle": title
-        ]
-    } else {
-        // Senior notifications are simple: title and description
-        content.title = title
-        content.body = description
-        content.userInfo = [
-            "role": "senior",
-            "reminderID": reminderID
-        ]
-    }
-//    content.sound = soundType == "Alert"
-//        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
-//        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
-    
-    // --- Configure notification sound ---
-    print("soundType is " + soundType)
-    if soundType == "Alert" {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
-    } else if soundType == "Chord" {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
-    } else if soundType == "Xylophone" {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("xylophone.wav"))
-    } else if soundType == "Marimba 1" {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("marimba1.wav"))
-    } else if soundType == "Marimba 2" {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("marimba2.wav"))
-    } else if soundType == "Chime" {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("chime.wav"))
-    } else if soundType == "Pulse" {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("pulse.wav"))
-    } else {
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
-    }
-
-    // Prepares trigger dates
-    var triggers: [Date] = []           // Will hold all instances of this reminder
-    
-    let calendar = Calendar.current
-    let startDate = stripSeconds(from: dateAndTime)
-    
-    // Parse repeat_until_date if not "Forever"
-    var endDate: Date? = nil
-    if repeat_until_date != "Forever" && !repeat_until_date.isEmpty {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd"
-        endDate = fmt.date(from: repeat_until_date)
-        var single_day = DateComponents()
-        single_day.day = 1
-        endDate = calendar.date(byAdding: single_day, to: endDate!) // Make inclusive
-    }
-
-    // Helper to add dates for repeats
-    func addRepeatingDates(interval: DateComponents) {
-        var nextDate = startDate
-        let maxOccurrences = 100 // Prevent infinite loops
-        var count = 0
-        print("I entered the function")
-        print(startDate)
-        while (endDate == nil || nextDate <= endDate!) && count < maxOccurrences {
-            print("nextDate: ")
-            print(nextDate)
-            triggers.append(nextDate) // Add this occurence
-            if let d = calendar.date(byAdding: interval, to: nextDate) {
-                nextDate = d // Move to the next occurence
-            } else {
-                print("Couldn't schedule repeating reminder")
-                break
-            }
-            count += 1
-        }
-        print("triggers: ")
-        print(triggers)
-    }
-    
-    //Helper to make sure time for notification is exactly :00 seconds
-    func stripSeconds(from date: Date) -> Date {
-        let calendar = Calendar.current
-        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-        return calendar.date(from: comps)!
-    }
-
-    // Generate all trigger dates based on repeat type
-    switch repeat_type {
-    case "None":
-        triggers.append(startDate)
-        
-    case "Daily":
-        addRepeatingDates(interval: DateComponents(day: 1))
-        
-    case "Weekly":
-        addRepeatingDates(interval: DateComponents(weekOfYear: 1))
-        
-    case "Monthly":
-        addRepeatingDates(interval: DateComponents(month: 1))
-        
-    case "Yearly":
-        addRepeatingDates(interval: DateComponents(year: 1))
-        
-    case "Custom":
-        if let repeatIntervals = repeatIntervals, let daysString = repeatIntervals.days {
-            let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
-            for pattern in patterns {
-                var currentDate = startDate
-                let maxOccurrences = 100
-                var count = 0
-                while (endDate == nil || currentDate <= endDate!) && count < maxOccurrences {
-                    if let nextDate = calculateNextDateForPattern(pattern: pattern, from: currentDate) {
-                        if endDate == nil || nextDate <= endDate! {
-                            triggers.append(nextDate)
-                            currentDate = calendar.date(byAdding: .month, value: 1, to: nextDate) ?? nextDate
-                        } else {
-                            break
-                        }
-                    } else {
-                        break
-                    }
-                    count += 1
-                }
-            }
-        }
-        
-    default:
-        triggers.append(startDate)
-    }
-
-    // Schedule notifications for all trigger dates
-    print("Triggers to schedule for reminder \(reminderID): \(triggers)")
-    for (index, triggerDate) in triggers.enumerated() {
-        // If caretaker, add alert delay
-        let mainTriggerDate = isCaretakerNotification ? triggerDate.addingTimeInterval(caretakerAlertDelay) : triggerDate
-        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: mainTriggerDate)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-        let role = isCaretakerNotification ? "caretaker" : "senior"
-        let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)-\(role)"
-        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Error adding notification: \(error)")
-            } else {
-                print("Scheduled notification \(identifier) for \(triggerDate)")
-            }
-        }
-        
-        // Schedule follow-up reminder for senior if task is not marked complete
-        if !isCaretakerNotification {
-            let halfDelaySeconds = caretakerAlertDelay / 2
-            let followUpDate = triggerDate.addingTimeInterval(halfDelaySeconds)
-
-            // Use a different content object for follow-up
-            let followUpContent = UNMutableNotificationContent()
-            followUpContent.title = "Reminder: \(title)"
-            followUpContent.body = "Make sure to mark ‘\(title)’ as done! Caretaker alert in \(Int((caretakerAlertDelay/2)/60)) min."
-            followUpContent.sound = content.sound
-            followUpContent.userInfo = [
-                "isFollowUp": true,
-                "reminderID": reminderID
-            ]
-            let timeInterval = followUpDate.timeIntervalSinceNow
-            if timeInterval > 0 {
-                let followUpTrigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
-                let followUpIdentifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-followup-\(index)"
-                
-                let followUpRequest = UNNotificationRequest(identifier: followUpIdentifier, content: followUpContent, trigger: followUpTrigger)
-                
-                UNUserNotificationCenter.current().add(followUpRequest) { error in
-                    if let error = error {
-                        print("Error scheduling follow-up notification: \(error)")
-                    } else {
-                        print("Scheduled follow-up notification \(followUpIdentifier) for \(followUpDate)")
-                    }
-                }
-            } else {
-                print("Skipped scheduling follow-up notification for \(reminderID) because the interval is \(timeInterval) seconds (non-positive)")
-            }
-        }
-        
-        
-    }
-}
+//func setAlarm(dateAndTime: Date, title: String, description: String, repeat_type: String, repeat_until_date: String, repeatIntervals: CustomRepeatType?, reminderID: String, soundType: String, caretakerAlertDelay: TimeInterval, forUIDs: [String]? = nil, isCaretakerNotification: Bool = false, seniorName: String? = nil) {
+//    //  Debug print to see which reminder is being scheduled
+//    print("setAlarm called for reminderID: \(reminderID), repeat_type: \(repeat_type), repeat_until_date: \(repeat_until_date), date: \(dateAndTime)")
+//    
+//    // Handle forever repeating alarms with NotificationManager
+//    if repeat_until_date == "Forever" && repeat_type != "None" {
+//        let reminder = ReminderData(
+//            ID: 0,
+//            date: dateAndTime,
+//            title: title,
+//            description: description,
+//            repeatSettings: RepeatSettings(
+//                repeat_type: repeat_type,
+//                repeat_until_date: repeat_until_date,
+//                repeatIntervals: repeatIntervals
+//            ),
+//            priority: "Low",
+//            isComplete: false,
+//            author: "user",
+//            isLocked: false,
+//            caretakerAlertDelay: caretakerAlertDelay
+//        )
+//        //scheduleForeverRepeatingAlarm handles infinit repeats
+//        NotificationManager.shared.scheduleForeverRepeatingAlarm(reminder: reminder, reminderID: reminderID, isCaretakerNotification: isCaretakerNotification, seniorName: seniorName)
+//        return
+//    }
+//    
+//    // Create the main UNNotificationContent object
+//    let content = UNMutableNotificationContent()
+//
+//    if isCaretakerNotification {
+//        // Caretaker notifications include the senior's name and a special body
+//        content.title = "🚨 \(seniorName ?? "Senior")'s Reminder"
+//        content.body = "\"\(title)\" is not finished yet."
+//        content.userInfo = [
+//            "role": "caretaker",
+//            "reminderID": reminderID,
+//            "seniorName": seniorName ?? "",
+//            "reminderTitle": title
+//        ]
+//    } else {
+//        // Senior notifications are simple: title and description
+//        content.title = title
+//        content.body = description
+//        content.userInfo = [
+//            "role": "senior",
+//            "reminderID": reminderID
+//        ]
+//    }
+////    content.sound = soundType == "Alert"
+////        ? UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+////        : UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+//    
+//    // --- Configure notification sound ---
+//    print("soundType is " + soundType)
+//    if soundType == "Alert" {
+//        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+//    } else if soundType == "Chord" {
+//        content.sound = UNNotificationSound(named: UNNotificationSoundName("chord_iphone.WAV"))
+//    } else if soundType == "Xylophone" {
+//        content.sound = UNNotificationSound(named: UNNotificationSoundName("xylophone.wav"))
+//    } else if soundType == "Marimba 1" {
+//        content.sound = UNNotificationSound(named: UNNotificationSoundName("marimba1.wav"))
+//    } else if soundType == "Marimba 2" {
+//        content.sound = UNNotificationSound(named: UNNotificationSoundName("marimba2.wav"))
+//    } else if soundType == "Chime" {
+//        content.sound = UNNotificationSound(named: UNNotificationSoundName("chime.wav"))
+//    } else if soundType == "Pulse" {
+//        content.sound = UNNotificationSound(named: UNNotificationSoundName("pulse.wav"))
+//    } else {
+//        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification_alert.wav"))
+//    }
+//
+//    // Prepares trigger dates
+//    var triggers: [Date] = []           // Will hold all instances of this reminder
+//    
+//    let calendar = Calendar.current
+//    let startDate = stripSeconds(from: dateAndTime)
+//    
+//    // Parse repeat_until_date if not "Forever"
+//    var endDate: Date? = nil
+//    if repeat_until_date != "Forever" && !repeat_until_date.isEmpty {
+//        let fmt = DateFormatter()
+//        fmt.dateFormat = "yyyy-MM-dd"
+//        endDate = fmt.date(from: repeat_until_date)
+//        var single_day = DateComponents()
+//        single_day.day = 1
+//        endDate = calendar.date(byAdding: single_day, to: endDate!) // Make inclusive
+//    }
+//
+//    // Helper to add dates for repeats
+//    func addRepeatingDates(interval: DateComponents) {
+//        var nextDate = startDate
+//        let maxOccurrences = 100 // Prevent infinite loops
+//        var count = 0
+//        print("I entered the function")
+//        print(startDate)
+//        while (endDate == nil || nextDate <= endDate!) && count < maxOccurrences {
+//            print("nextDate: ")
+//            print(nextDate)
+//            triggers.append(nextDate) // Add this occurence
+//            if let d = calendar.date(byAdding: interval, to: nextDate) {
+//                nextDate = d // Move to the next occurence
+//            } else {
+//                print("Couldn't schedule repeating reminder")
+//                break
+//            }
+//            count += 1
+//        }
+//        print("triggers: ")
+//        print(triggers)
+//    }
+//    
+//    //Helper to make sure time for notification is exactly :00 seconds
+//    func stripSeconds(from date: Date) -> Date {
+//        let calendar = Calendar.current
+//        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+//        return calendar.date(from: comps)!
+//    }
+//
+//    // Generate all trigger dates based on repeat type
+//    switch repeat_type {
+//    case "None":
+//        triggers.append(startDate)
+//        
+//    case "Daily":
+//        addRepeatingDates(interval: DateComponents(day: 1))
+//        
+//    case "Weekly":
+//        addRepeatingDates(interval: DateComponents(weekOfYear: 1))
+//        
+//    case "Monthly":
+//        addRepeatingDates(interval: DateComponents(month: 1))
+//        
+//    case "Yearly":
+//        addRepeatingDates(interval: DateComponents(year: 1))
+//        
+//    case "Custom":
+//        if let repeatIntervals = repeatIntervals, let daysString = repeatIntervals.days {
+//            let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+//            for pattern in patterns {
+//                var currentDate = startDate
+//                let maxOccurrences = 100
+//                var count = 0
+//                while (endDate == nil || currentDate <= endDate!) && count < maxOccurrences {
+//                    if let nextDate = calculateNextDateForPattern(pattern: pattern, from: currentDate) {
+//                        if endDate == nil || nextDate <= endDate! {
+//                            triggers.append(nextDate)
+//                            currentDate = calendar.date(byAdding: .month, value: 1, to: nextDate) ?? nextDate
+//                        } else {
+//                            break
+//                        }
+//                    } else {
+//                        break
+//                    }
+//                    count += 1
+//                }
+//            }
+//        }
+//        
+//    default:
+//        triggers.append(startDate)
+//    }
+//
+//    // Schedule notifications for all trigger dates
+//    print("Triggers to schedule for reminder \(reminderID): \(triggers)")
+//    for (index, triggerDate) in triggers.enumerated() {
+//        // If caretaker, add alert delay
+//        let mainTriggerDate = isCaretakerNotification ? triggerDate.addingTimeInterval(caretakerAlertDelay) : triggerDate
+//        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: mainTriggerDate)
+//        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+//        let role = isCaretakerNotification ? "caretaker" : "senior"
+//        let identifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-\(index)-\(role)"
+//        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+//        
+//        UNUserNotificationCenter.current().add(request) { error in
+//            if let error = error {
+//                print("Error adding notification: \(error)")
+//            } else {
+//                print("Scheduled notification \(identifier) for \(triggerDate)")
+//            }
+//        }
+//        
+//        // Schedule follow-up reminder for senior if task is not marked complete
+//        if !isCaretakerNotification {
+//            let halfDelaySeconds = caretakerAlertDelay / 2
+//            let followUpDate = triggerDate.addingTimeInterval(halfDelaySeconds)
+//
+//            // Use a different content object for follow-up
+//            let followUpContent = UNMutableNotificationContent()
+//            followUpContent.title = "Reminder: \(title)"
+//            followUpContent.body = "Make sure to mark ‘\(title)’ as done! Caretaker alert in \(Int((caretakerAlertDelay/2)/60)) min."
+//            followUpContent.sound = content.sound
+//            followUpContent.userInfo = [
+//                "isFollowUp": true,
+//                "reminderID": reminderID
+//            ]
+//            let timeInterval = followUpDate.timeIntervalSinceNow
+//            if timeInterval > 0 {
+//                let followUpTrigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
+//                let followUpIdentifier = "\(createUniqueIDFromDate(date: createExactDateFromString(dateString: reminderID)))-followup-\(index)"
+//                
+//                let followUpRequest = UNNotificationRequest(identifier: followUpIdentifier, content: followUpContent, trigger: followUpTrigger)
+//                
+//                UNUserNotificationCenter.current().add(followUpRequest) { error in
+//                    if let error = error {
+//                        print("Error scheduling follow-up notification: \(error)")
+//                    } else {
+//                        print("Scheduled follow-up notification \(followUpIdentifier) for \(followUpDate)")
+//                    }
+//                }
+//            } else {
+//                print("Skipped scheduling follow-up notification for \(reminderID) because the interval is \(timeInterval) seconds (non-positive)")
+//            }
+//        }
+//        
+//        
+//    }
+//}
 
 func calculateNextDateForPattern(pattern: String, from baseDate: Date) -> Date? {
     let calendar = Calendar.current

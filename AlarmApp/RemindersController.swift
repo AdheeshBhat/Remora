@@ -46,14 +46,15 @@ struct ReminderData: Codable, Equatable {
     var repeatSettings: RepeatSettings
     var priority: String    //Low or High
     var isComplete: Bool    //true = complete
-    var author: String      //"user" or "caregiver"
+    var author: String      //always the senior
+    var creator: String     //senior or caregiver
     var isLocked: Bool      //true = locked
     var caretakerAlertDelay: TimeInterval
     var deletedInstances: [Date]
     var completedInstances: [Date]
 
     
-    init(ID: Int, date: Date, title: String, description: String, repeatSettings: RepeatSettings, priority: String, isComplete: Bool, author: String, isLocked: Bool, caretakerAlertDelay: TimeInterval, deletedInstances: [Date] = [], completedInstances: [Date] = []) {
+    init(ID: Int, date: Date, title: String, description: String, repeatSettings: RepeatSettings, priority: String, isComplete: Bool, author: String, creator: String, isLocked: Bool, caretakerAlertDelay: TimeInterval, deletedInstances: [Date] = [], completedInstances: [Date] = []) {
         self.ID = ID
         self.date = date
         self.title = title
@@ -62,6 +63,7 @@ struct ReminderData: Codable, Equatable {
         self.priority = priority
         self.isComplete = isComplete
         self.author = author
+        self.creator = creator
         self.isLocked = isLocked
         self.caretakerAlertDelay = caretakerAlertDelay
         let formatter = DateFormatter()

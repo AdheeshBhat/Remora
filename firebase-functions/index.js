@@ -26,15 +26,125 @@ exports.scheduleReminderNotification =
         .onWrite(async (change, context) => {
           const {userId, reminderId} = context.params;
 
+          // Fetch userData
+          const userDocEarly = await admin.firestore()
+              .collection("users")
+              .doc(userId)
+              .get();
+
+          const userData = userDocEarly.data();
+
             //reminder does NOT exist after the change OR it's complete -> cancel it
+            // deleting a reminder fully
           if (!change.after.exists ||
               change.after.data().isComplete) {
             await cancelScheduledNotifications(userId, reminderId);
             return null;
           }
 
-            // If the reminder existed before this write, it means the reminder is being edited. Cancel any previously scheduled notifications
+            
+            // HANDLING COMPLETE/UNCOMPLETE/DELETE INSTANCE CASES (before full edit wipe)
             if (change.before.exists && change.after.exists) {
+              const beforeData = change.before.data();
+              const afterData = change.after.data();
+
+              const beforeDeleted = (beforeData.deletedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+              const afterDeleted = (afterData.deletedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+
+              const beforeCompleted = (beforeData.completedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+              const afterCompleted = (afterData.completedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+
+              const findAdded = (beforeArr, afterArr) => {
+                return afterArr.find(a =>
+                  !beforeArr.some(b => b.getTime() === a.getTime())
+                );
+              };
+
+              const findRemoved = (beforeArr, afterArr) => {
+                return beforeArr.find(b =>
+                  !afterArr.some(a => a.getTime() === b.getTime())
+                );
+              };
+
+              // CASE 1: Deleted instance
+              const deletedInstance = findAdded(beforeDeleted, afterDeleted);
+              if (deletedInstance) {
+                console.log("🗑️ Deleting instance:", deletedInstance.toISOString());
+                await cancelSingleInstance(userId, reminderId, deletedInstance);
+                return null;
+              }
+
+              // CASE 2: Completed instance
+              const completedInstance = findAdded(beforeCompleted, afterCompleted);
+              if (completedInstance) {
+                console.log("✅ Completing instance:", completedInstance.toISOString());
+                await cancelSingleInstance(userId, reminderId, completedInstance);
+                return null;
+              }
+
+              // CASE 3: Un-completing instance
+              const uncompletedInstance = findRemoved(beforeCompleted, afterCompleted);
+              if (uncompletedInstance) {
+                console.log("🔁 Un-completing instance:", uncompletedInstance.toISOString());
+
+                const reminder = change.after.data();
+
+                // Normalize time to match stored occurrences
+                uncompletedInstance.setSeconds(0);
+                uncompletedInstance.setMilliseconds(0);
+
+                const delay = uncompletedInstance.getTime() - Date.now();
+
+                if (delay > 0 && !userData.isCaretaker) {
+                  // Schedule main notification
+                  await scheduleNotification(
+                    userId,
+                    reminder.title,
+                    reminder.description,
+                    delay,
+                    reminderId,
+                    uncompletedInstance
+                  );
+
+                  // Follow-up
+                  const caretakerAlertDelay =
+                    reminder.caretakerAlertDelay ||
+                    (DEFAULT_CARETAKER_DELAY_MS / 1000);
+
+                  const followUpDelay =
+                    delay + (caretakerAlertDelay * 1000) / 2;
+
+                  await scheduleNotification(
+                    userId,
+                    `Reminder: "${reminder.title}"`,
+                    `Make sure to mark "${reminder.title}" as done!`,
+                    followUpDelay,
+                    `${reminderId}-follow-up`,
+                    uncompletedInstance
+                  );
+
+                  // Caretaker notification
+                  if (Array.isArray(userData.LinkedCaretakers)) {
+                    const caretakerDelay =
+                      delay + (caretakerAlertDelay * 1000);
+
+                    for (const caretakerId of userData.LinkedCaretakers) {
+                      await scheduleNotification(
+                        caretakerId,
+                        `🚨 ${reminder.author || "Senior"}'s Reminder`,
+                        `"${reminder.title}" is not finished yet.`,
+                        caretakerDelay,
+                        reminderId,
+                        uncompletedInstance
+                      );
+                    }
+                  }
+                }
+
+                return null;
+              }
+
+              // FALLBACK: full edit → wipe + rebuild
               await cancelScheduledNotifications(userId, reminderId);
             }
 
@@ -68,12 +178,6 @@ exports.scheduleReminderNotification =
                    d1.getDate() === d2.getDate();
           };
 
-          const userDoc = await admin.firestore()
-              .collection("users")
-              .doc(userId)
-              .get();
-
-          const userData = userDoc.data();
 
           // If this document belongs to a caretaker,
           // do NOT schedule notifications from here.
@@ -100,7 +204,7 @@ exports.scheduleReminderNotification =
             const isCompleted = completedInstances.some(d => isSameDay(d, occurrenceDate));
 
             if (isDeleted || isCompleted) {
-              console.log("⏭️ Skipping instance:", occurrenceDate.toISOString(), 
+              console.log("⏭️ Skipping instance:", occurrenceDate.toISOString(),
                           isDeleted ? "DELETED" : "COMPLETED");
               continue;
             }
@@ -503,6 +607,47 @@ async function cancelScheduledNotifications(
   docsToDelete.forEach((doc) => {
     batch.delete(doc.ref);
   });
+
+  await batch.commit();
+}
+
+// ============================================================================
+// Cancels notifications for ONE specific occurrence
+
+async function cancelSingleInstance(userId, reminderId, occurrenceDate) {
+  const snapshot = await admin.firestore()
+    .collection("scheduledNotifications")
+    .where("userId", "==", userId)
+    .get();
+
+  const isSameDay = (d1, d2) => {
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+  };
+
+  const docsToDelete = snapshot.docs.filter((doc) => {
+    const data = doc.data();
+    const rid = data.reminderId;
+
+    if (rid !== reminderId && rid !== `${reminderId}-follow-up`) {
+      return false;
+    }
+
+    if (!data.occurrenceDate) return false;
+
+    const occDate = data.occurrenceDate.toDate();
+
+    return isSameDay(occDate, occurrenceDate);
+  });
+
+  const batch = admin.firestore().batch();
+
+  docsToDelete.forEach((doc) => {
+    batch.delete(doc.ref);
+  });
+
+  console.log("🧹 Cancelled", docsToDelete.length, "notifications for one instance");
 
   await batch.commit();
 }

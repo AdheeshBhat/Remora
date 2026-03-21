@@ -30,7 +30,7 @@ struct CaretakerHomeView: View {
                         .fontWeight(.medium)
                         .foregroundColor(.blue.opacity(0.7))
                 }
-                .sheet(isPresented: $showingMissedDashboard) {
+                .navigationDestination(isPresented: $showingMissedDashboard) {
                     MissedRemindersView(firestoreManager: firestoreManager)
                 }
 
@@ -217,37 +217,111 @@ struct AddSeniorView: View {
     }
 }
 
+
+
+
+
+// MOVE BELOW STRUCT TO ANOTHER FILE
 struct MissedRemindersView: View {
     let firestoreManager: FirestoreManager
     @State private var missedReminders: [MissedReminder] = []
+    @State private var selectedSeniorFilter: String = "All"
+    @State private var showMissedOnly: Bool = true
+    @State private var availableSeniors: [String] = ["All"]
 
     var body: some View {
-        NavigationView {
+        VStack {
+            HStack {
+                Spacer()
+
+                Menu {
+                    ForEach(availableSeniors, id: \.self) { senior in
+                        Button(senior) {
+                            selectedSeniorFilter = senior
+                            loadMissedReminders()
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text("Senior: \(selectedSeniorFilter)")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        Image(systemName: "chevron.down")
+                            .font(.subheadline)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.blue.opacity(0.15))
+                    .cornerRadius(12)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal)
+
             List {
                 if missedReminders.isEmpty {
                     Text("No missed reminders.")
                         .foregroundColor(.secondary)
                 } else {
                     ForEach(missedReminders) { reminder in
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text(reminder.title)
-                                .font(.headline)
+                                .font(.title3)
+                                .fontWeight(.semibold)
 
                             Text("Senior: \(reminder.seniorName)")
                                 .font(.subheadline)
+                                .fontWeight(.medium)
+
+                            Text("Created by: \(reminder.createdBy)")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
 
                             Text(reminder.dateString)
-                                .font(.caption)
+                                .font(.footnote)
                                 .foregroundColor(.secondary)
                         }
                         .padding(.vertical, 4)
                     }
                 }
             }
-            .navigationTitle("Missed Reminders")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Dashboard")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                }
+            }
             .onAppear {
                 loadMissedReminders()
             }
+
+            Spacer(minLength: 8)
+
+            VStack(spacing: 12) {
+                Toggle(isOn: $showMissedOnly) {
+                    Text("Show Missed Only")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                }
+                .toggleStyle(SwitchToggleStyle(tint: .green))
+                .onChange(of: showMissedOnly) {
+                    loadMissedReminders()
+                }
+            }
+            .padding(16)
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.blue.opacity(0.5), lineWidth: 2)
+            )
+            .padding(.horizontal)
+            .padding(.top, 8)
         }
     }
     
@@ -263,6 +337,8 @@ struct MissedRemindersView: View {
             // Build UID -> firstName map for better UI
             var nameMap: [String: String] = [:]
             let nameGroup = DispatchGroup()
+            var caretakerNameMap: [String: String] = [:]
+            let caretakerGroup = DispatchGroup()
 
             for uid in seniorUIDs {
                 nameGroup.enter()
@@ -272,28 +348,44 @@ struct MissedRemindersView: View {
                 }
             }
 
+            for uid in seniorUIDs {
+                firestoreManager.getLinkedCaretakersForSenior(seniorUID: uid) { caretakerUIDs in
+                    for caretakerUID in caretakerUIDs {
+                        caretakerGroup.enter()
+                        firestoreManager.getUserFirstName(forUID: caretakerUID) { name in
+                            caretakerNameMap[caretakerUID] = name ?? "Caretaker"
+                            caretakerGroup.leave()
+                        }
+                    }
+                }
+            }
+
             nameGroup.notify(queue: .main) {
-                firestoreManager.getRemindersForMultipleUsers(uids: seniorUIDs) { results in
+                caretakerGroup.notify(queue: .main) {
+                    firestoreManager.getRemindersForMultipleUsers(uids: seniorUIDs) { results in
 
-                    var newMissed: [MissedReminder] = []
-                    let now = Date()
+                        var newMissed: [MissedReminder] = []
+                        let now = Date()
 
-                    for (uid, reminders) in results {
-                        for (_, reminder) in reminders {
-                            let scheduledDate = reminder.date
-                            let delay = reminder.caretakerAlertDelay
-                            let deadline = scheduledDate.addingTimeInterval(delay)
+                        for (uid, reminders) in results {
+                            for (_, reminder) in reminders {
+                                let scheduledDate = reminder.date
+                                let delay = reminder.caretakerAlertDelay
+                                let deadline = scheduledDate.addingTimeInterval(delay)
 
-                            if deadline < now {
                                 if reminder.repeatSettings.repeat_type == "None" {
                                     if !reminder.isComplete {
-                                        newMissed.append(
-                                            MissedReminder(
-                                                title: reminder.title,
-                                                seniorName: nameMap[uid] ?? "Unknown",
-                                                dateString: formatDate(scheduledDate)
-                                            )
+                                        let createdBy = reminder.creator
+
+                                        let reminderItem = MissedReminder(
+                                            title: reminder.title,
+                                            seniorName: nameMap[uid] ?? "Unknown",
+                                            date: scheduledDate,
+                                            dateString: formatDate(scheduledDate),
+                                            createdBy: createdBy,
+                                            isMissed: deadline < now
                                         )
+                                        newMissed.append(reminderItem)
                                     }
 
                                 } else {
@@ -301,22 +393,36 @@ struct MissedRemindersView: View {
                                         Calendar.current.isDate($0, inSameDayAs: scheduledDate)
                                     }
                                     if !completed {
-                                        newMissed.append(
-                                            MissedReminder(
-                                                title: reminder.title,
-                                                seniorName: nameMap[uid] ?? "Unknown",
-                                                dateString: formatDate(scheduledDate)
-                                            )
+                                        let createdBy = reminder.creator
+
+                                        let reminderItem = MissedReminder(
+                                            title: reminder.title,
+                                            seniorName: nameMap[uid] ?? "Unknown",
+                                            date: scheduledDate,
+                                            dateString: formatDate(scheduledDate),
+                                            createdBy: createdBy,
+                                            isMissed: deadline < now
                                         )
+                                        newMissed.append(reminderItem)
                                     }
                                 }
                             }
                         }
-                    }
 
-                    DispatchQueue.main.async {
-                        self.missedReminders = newMissed.sorted {
-                            $0.dateString > $1.dateString
+                        var filtered = newMissed
+
+                        if selectedSeniorFilter != "All" {
+                            filtered = filtered.filter { $0.seniorName == selectedSeniorFilter }
+                        }
+
+                        if showMissedOnly {
+                            filtered = filtered.filter { $0.isMissed }
+                        }
+
+                        self.availableSeniors = ["All"] + Array(Set(newMissed.map { $0.seniorName }))
+
+                        self.missedReminders = filtered.sorted {
+                            $0.date > $1.date
                         }
                     }
                 }
@@ -329,5 +435,8 @@ struct MissedReminder: Identifiable {
     let id = UUID()
     let title: String
     let seniorName: String
+    let date: Date
     let dateString: String
+    let createdBy: String
+    let isMissed: Bool
 }
