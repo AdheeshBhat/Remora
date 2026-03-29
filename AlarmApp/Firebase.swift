@@ -855,10 +855,10 @@ class FirestoreManager: ObservableObject {
     //   - token: The FCM token string.
     //   - userUID: The UID of the user.
     func storeFCMToken(token: String, for userUID: String) {
-        db.collection("users").document(userUID).updateData([
+        db.collection("users").document(userUID).setData([
             "fcmToken": token,
             "tokenUpdatedAt": FieldValue.serverTimestamp()
-        ]) { error in
+        ], merge: true) { error in
             if let error = error {
                 print("Error storing FCM token: \(error)")
             } else {

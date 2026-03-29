@@ -12,7 +12,7 @@ import SwiftUI
 
 func createDate(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int) -> Date {
     var calendar = Calendar.current
-    calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+    calendar.timeZone = TimeZone(identifier: "UTC")!
     let created_date = calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute, second: second))
     return created_date ?? Date.now
     
@@ -43,7 +43,7 @@ func createDateFromString(dateString: String) -> Date {
 //}
 func createExactDateFromString(dateString: String) -> Date {
     let formatter = DateFormatter()
-    formatter.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+    formatter.timeZone = TimeZone(identifier: "UTC")!
     
     // Try full timestamp format first
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"

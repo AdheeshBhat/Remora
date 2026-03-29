@@ -46,6 +46,7 @@ struct AlarmAppApp: App {
     private func setupAuthListener() {
         authHandle = Auth.auth().addStateDidChangeListener { _, user in
             if user != nil {
+                PushNotificationManager.shared.registerForPushNotifications()
                 let loader = FirestoreManager()
                 appearance.loadFromFirebase(firestoreManager: loader)
             } else {

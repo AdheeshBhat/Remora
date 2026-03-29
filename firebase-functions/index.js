@@ -309,7 +309,7 @@ function generateOccurrences(
     let currentDate = new Date(startDate);
     const endDate = parseEndDate(repeatUntil);
 
-    while (currentDate <= now) {
+    while (currentDate < now) {
         currentDate = getNextOccurrence(
             currentDate,
             repeatType,
@@ -347,7 +347,7 @@ function parseEndDate(repeatUntil) {
     return null;
   }
     const [year,month,day] = repeatUntil.split("-").map(Number)
-  const endDate = new Date(year, (month - 1), day, 23, 59, 59, 999);
+  const endDate = new Date(Date.UTC(year, (month - 1), day, 23, 59, 59, 999));
     //console.log(endDate);
   return endDate;
 }
