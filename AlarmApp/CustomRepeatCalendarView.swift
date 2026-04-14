@@ -11,13 +11,10 @@ struct CustomRepeatCalendarView: View {
     @Environment(\.presentationMode) var presentationMode
     @Binding var cur_screen: Screen
     @State var title: String
-    @State private var selectedDays: Set<String> = []
+    @State private var selectedDays: Set<Int> = []
     @Binding var repeatSetting: String
     @Binding var customPatterns: Set<String>
     let firestoreManager: FirestoreManager
-    
-    let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    let weeks = ["1st", "2nd", "3rd", "4th", "Last"]
     
     var body: some View {
         ScrollView {
@@ -52,61 +49,28 @@ struct CustomRepeatCalendarView: View {
             }
             .padding(.horizontal, 16)
             
-            // Calendar-like grid
             VStack(spacing: 12) {
-                // Header with weekdays
-                HStack(spacing: 4) {
-                    // Empty space for week labels
-                    Text("")
-                        .frame(width: 50)
-                    
-                    ForEach(weekdays, id: \.self) { day in
-                        Text(day)
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                            .frame(maxWidth: .infinity)
+                let columns = Array(repeating: GridItem(.flexible()), count: 7)
+
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(1...31, id: \.self) { day in
+                        Button(action: {
+                            if selectedDays.contains(day) {
+                                selectedDays.remove(day)
+                            } else {
+                                selectedDays.insert(day)
+                            }
+                        }) {
+                            Text("\(day)")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, minHeight: 40)
+                                .background(selectedDays.contains(day) ? Color.green : Color.blue.opacity(0.1))
+                                .foregroundColor(selectedDays.contains(day) ? .white : .primary)
+                                .cornerRadius(8)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 16)
-                
-                // Grid of selectable cells
-                ForEach(weeks, id: \.self) { week in
-                    HStack(spacing: 4) {
-                        Text(week)
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                            .frame(width: 50)
-                        
-                        ForEach(weekdays, id: \.self) { day in
-                            let cellKey = "\(week) \(day)"
-                            Button(action: {
-                                if selectedDays.contains(cellKey) {
-                                    selectedDays.remove(cellKey)
-                                } else {
-                                    selectedDays.insert(cellKey)
-                                }
-                            }) {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(selectedDays.contains(cellKey) ? Color.green : Color.blue.opacity(0.1))
-                                    .frame(height: 50)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(selectedDays.contains(cellKey) ? Color.green : Color.blue.opacity(0.3), lineWidth: 2)
-                                    )
-                                    .overlay(
-                                        Text(selectedDays.contains(cellKey) ? "✓" : "")
-                                            .foregroundColor(selectedDays.contains(cellKey) ? .white : .clear)
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                    )
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
                 .padding(.bottom, 16)
             }
             .background(Color.blue.opacity(0.1))
@@ -117,7 +81,6 @@ struct CustomRepeatCalendarView: View {
             .cornerRadius(12)
             .padding(.horizontal, 16)
             
-                // Selected patterns display
                 if !selectedDays.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Selected Pattern:")
@@ -126,8 +89,8 @@ struct CustomRepeatCalendarView: View {
                             .foregroundColor(.primary)
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            ForEach(Array(selectedDays).sorted(), id: \.self) { pattern in
-                                Text("• \(pattern) of each month")
+                            ForEach(Array(selectedDays).sorted(), id: \.self) { day in
+                                Text("• Day \(day) of each month")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                             }
@@ -144,10 +107,9 @@ struct CustomRepeatCalendarView: View {
                     .padding(.horizontal, 16)
                 }
             
-                // Done button
                 Button(action: {
                     // Save the custom repeat pattern
-                    customPatterns = selectedDays
+                    customPatterns = Set(selectedDays.map { String($0) })
                     if !selectedDays.isEmpty {
                         repeatSetting = "Custom"
                     }
@@ -168,7 +130,7 @@ struct CustomRepeatCalendarView: View {
         }
         
         .onAppear {
-            selectedDays = customPatterns
+            selectedDays = Set(customPatterns.compactMap { Int($0) })
         }
         
         VStack {

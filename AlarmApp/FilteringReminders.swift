@@ -205,58 +205,58 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 
             }
         } else if repeatType == "Custom" {
-            // Handle custom patterns differently - generate all occurrences in range
             if let intervals = reminder.repeatSettings.repeatIntervals, let daysString = intervals.days {
-                // Split patterns into individual rules
-                let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
-                // Used to prevent duplicate instances
+                let calendar = Calendar.current
+                let dayNumbers = daysString
+                    .split(separator: ",")
+                    .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                
                 var seenDates = Set<String>()
+                var currentMonthDate = calendar.date(from: calendar.dateComponents([.year, .month], from: reminder.date))!
                 
-                // Include original reminder if it's in range
-                if reminder.date >= startDate && reminder.date <= endDate &&
-                    (!hideCompleted || !reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date)} )) &&
-                   !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }) {                    expandedData[documentID] = reminder
-                }
-                
-                // Generate occurrences for each month in range, starting from next month after original
-                let originalMonth = calendar.dateComponents([.year, .month], from: reminder.date)
-                let startMonth = calendar.date(byAdding: .month, value: 1, to: calendar.date(from: originalMonth)!) ?? reminder.date
-                var currentMonth = calendar.dateComponents([.year, .month], from: startMonth)
-                let endMonth = calendar.dateComponents([.year, .month], from: endDate)
-                
-                // Caps generation at 50
-                while (currentMonth.year! < endMonth.year! || (currentMonth.year! == endMonth.year! && currentMonth.month! <= endMonth.month!)) && seenDates.count < 50 {
-                    let monthStart = calendar.date(from: currentMonth)!
+                while currentMonthDate <= endDate && seenDates.count < 50 {
+                    let year = calendar.component(.year, from: currentMonthDate)
+                    let month = calendar.component(.month, from: currentMonthDate)
                     
-                    //Apply each custom pattern (e.g. "2nd Tue")
-                    for pattern in patterns {
-                        // Convert pattern → actual date in this month
-                        if let occurrenceDate = calculatePatternDateForMonth(pattern: pattern, month: monthStart) {
-                            // Preserve original reminder time (hour/minute)
-                            let finalDate = calendar.date(bySettingHour: calendar.component(.hour, from: reminder.date), minute: calendar.component(.minute, from: reminder.date), second: 0, of: occurrenceDate)!
+                    for day in dayNumbers {
+                        var components = DateComponents()
+                        components.year = year
+                        components.month = month
+                        components.day = day
+                        
+                        if let occurrenceDate = calendar.date(from: components) {
+                            let finalDate = calendar.date(
+                                bySettingHour: calendar.component(.hour, from: reminder.date),
+                                minute: calendar.component(.minute, from: reminder.date),
+                                second: 0,
+                                of: occurrenceDate
+                            )!
+                            
                             let dateKey = createUniqueIDFromDate(date: finalDate)
-
-                            // Only include valid, non-deleted, non-duplicate instances
+                            
                             if finalDate >= startDate && finalDate <= endDate &&
-                               !seenDates.contains(dateKey) &&
-                                (!hideCompleted || !reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate)} )) &&
-                               !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate) }) {                                seenDates.insert(dateKey)
-                                // Clone the reminder and override instance-specific fields
+                                !seenDates.contains(dateKey) &&
+                                (!hideCompleted || !reminder.completedInstances.contains(where: {
+                                    Calendar.current.isDate($0, inSameDayAs: finalDate)
+                                })) &&
+                                !reminder.deletedInstances.contains(where: {
+                                    Calendar.current.isDate($0, inSameDayAs: finalDate)
+                                }) {
+                                
+                                seenDates.insert(dateKey)
                                 var instanceReminder = reminder
                                 instanceReminder.date = finalDate
-                                // Mark instance complete if its date appears in completedInstances
-                                instanceReminder.isComplete = (hideCompleted || reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate)} ))
+                                instanceReminder.isComplete = reminder.completedInstances.contains(where: {
+                                    Calendar.current.isDate($0, inSameDayAs: finalDate)
+                                })
+                                
                                 expandedData["\(documentID)-\(dateKey)"] = instanceReminder
                             }
                         }
                     }
                     
                     // Move to next month
-                    currentMonth.month! += 1
-                    if currentMonth.month! > 12 {
-                        currentMonth.month = 1
-                        currentMonth.year! += 1
-                    }
+                    currentMonthDate = calendar.date(byAdding: .month, value: 1, to: currentMonthDate)!
                 }
             }
         } else {
@@ -338,43 +338,50 @@ func expandRepeatingRemindersForCalendar(userData: [String: ReminderData], start
             
         } else if repeatType == "Custom" {
             if let intervals = reminder.repeatSettings.repeatIntervals, let daysString = intervals.days {
-                let patterns = daysString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+                let calendar = Calendar.current
+                let dayNumbers = daysString
+                    .split(separator: ",")
+                    .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                
                 var seenDates = Set<String>()
+                var currentMonthDate = calendar.date(from: calendar.dateComponents([.year, .month], from: reminder.date))!
                 
-                // Include original reminder if it's in range
-                if reminder.date >= startDate && reminder.date <= endDate &&
-                    !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: reminder.date) }){         //HERE----------
-                    expandedData[documentID] = reminder
-                }
-                
-                let originalMonth = calendar.dateComponents([.year, .month], from: reminder.date)
-                let startMonth = calendar.date(byAdding: .month, value: 1, to: calendar.date(from: originalMonth)!) ?? reminder.date
-                var currentMonth = calendar.dateComponents([.year, .month], from: startMonth)
-                let endMonth = calendar.dateComponents([.year, .month], from: endDate)
-                
-                while (currentMonth.year! < endMonth.year! || (currentMonth.year! == endMonth.year! && currentMonth.month! <= endMonth.month!)) && seenDates.count < 200 {
-                    let monthStart = calendar.date(from: currentMonth)!
+                while currentMonthDate <= endDate && seenDates.count < 200 {
+                    let year = calendar.component(.year, from: currentMonthDate)
+                    let month = calendar.component(.month, from: currentMonthDate)
                     
-                    for pattern in patterns {
-                        if let occurrenceDate = calculatePatternDateForMonth(pattern: pattern, month: monthStart) {
-                            let finalDate = calendar.date(bySettingHour: calendar.component(.hour, from: reminder.date), minute: calendar.component(.minute, from: reminder.date), second: 0, of: occurrenceDate)!
+                    for day in dayNumbers {
+                        var components = DateComponents()
+                        components.year = year
+                        components.month = month
+                        components.day = day
+                        
+                        if let occurrenceDate = calendar.date(from: components) {
+                            let finalDate = calendar.date(
+                                bySettingHour: calendar.component(.hour, from: reminder.date),
+                                minute: calendar.component(.minute, from: reminder.date),
+                                second: 0,
+                                of: occurrenceDate
+                            )!
+                            
                             let dateKey = createUniqueIDFromDate(date: finalDate)
                             
-                            if finalDate >= startDate && finalDate <= endDate && !seenDates.contains(dateKey) &&
-                                !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate) }){     //HERE----------
+                            if finalDate >= startDate && finalDate <= endDate &&
+                                !seenDates.contains(dateKey) &&
+                                !reminder.deletedInstances.contains(where: {
+                                    Calendar.current.isDate($0, inSameDayAs: finalDate)
+                                }) {
+                                
                                 seenDates.insert(dateKey)
                                 var instanceReminder = reminder
                                 instanceReminder.date = finalDate
+                                
                                 expandedData["\(documentID)-\(dateKey)"] = instanceReminder
                             }
                         }
                     }
                     
-                    currentMonth.month! += 1
-                    if currentMonth.month! > 12 {
-                        currentMonth.month = 1
-                        currentMonth.year! += 1
-                    }
+                    currentMonthDate = calendar.date(byAdding: .month, value: 1, to: currentMonthDate)!
                 }
             }
         } else {

@@ -92,6 +92,9 @@ struct RemindersScreen: View {
         .onChange(of: filterPeriod) { _, _ in
             canResetDate = displayedPeriodDiffersFromToday()
         }
+        .onChange(of: isHideCompletedReminders) { _, _ in
+            loadReminders()
+        }
     }
 
     // MARK: - Subviews split for type-checking
@@ -281,9 +284,12 @@ struct RemindersScreen: View {
                                 hideCompleted: isHideCompletedReminders
                             )
 
-                            let visibleReminders = isHideCompletedReminders
-                                ? expandedReminders.filter { !$0.value.isComplete }
-                                : expandedReminders
+                            let visibleReminders = expandedReminders.filter { reminder in
+                                if isHideCompletedReminders {
+                                    return !reminder.value.isComplete
+                                }
+                                return true
+                            }
                             
                             // This function sorts reminders and creates ReminderRow views (actual UI)
                             let filteredReminders = formattedReminders(
@@ -478,7 +484,9 @@ struct RemindersScreen: View {
     // Fetches reminders from Firestore and stores them in remindersForUser
     private func loadReminders() {
         firestoreManager.getRemindersForUser { reminders in
-            self.remindersForUser = reminders ?? [:]
+            DispatchQueue.main.async {
+                self.remindersForUser = reminders ?? [:]
+            }
         }
     }
     
@@ -700,7 +708,9 @@ struct ReminderRow: View {
                                     // For non-repeating reminders, delete immediately
                                     //cancelAlarm(reminderID: documentID)
                                     firestoreManager.deleteReminder(reminderID: documentID)
-                                    onUpdate?()
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        onUpdate?()
+                                    }
                                 }
                             }
                             Button("Nevermind", role: .cancel) {}
@@ -713,8 +723,9 @@ struct ReminderRow: View {
                                     dateCreated: documentID,
                                     fields: ["deletedInstances": FieldValue.arrayUnion([dateKey])]
                                 )
-
-                                onUpdate?()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    onUpdate?()
+                                }
                             }
                             Button("Delete All Occurrences", role: .destructive) {
                                 let repeatSettings = curReminderData["repeatSettings"] as? [String: Any]
@@ -726,7 +737,9 @@ struct ReminderRow: View {
                                     NotificationManager.shared.cancelForeverAlarm(reminderID: documentID)
                                 }
                                 firestoreManager.deleteReminder(reminderID: documentID)
-                                onUpdate?()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    onUpdate?()
+                                }
                             }
                             Button("Cancel", role: .cancel) {}
                         }
@@ -775,7 +788,7 @@ struct ReminderRow: View {
 //                   let days = repeatIntervals["days"] as? String {
 //                    customRepeat = CustomRepeatType(days: days)
 //                }
-//                
+//
 //                firestoreManager.loadUserSettings(field: "selectedSound") {soundValue in
 //                    let soundType = (soundValue as? String) ?? "Chord"
 //                    let activeUID = firestoreManager.activeUserUID
@@ -829,7 +842,7 @@ struct ReminderRow: View {
 //                        }
 //                    }
 //                }
-//                
+//
 //                print("Reminder has been marked as incomplete and alarm rescheduled for \(date)")
 //            }
 //        }

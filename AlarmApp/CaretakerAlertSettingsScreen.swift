@@ -19,7 +19,7 @@ struct CaretakerAlertSettingsScreen: View {
     @State private var tempSelectedDelay: TimeInterval
 
     private let options: [(label: String, value: TimeInterval)] = [
-        ("After 10 mins", 60),
+        ("After 10 mins", 10 * 60),
         ("After 30 mins", 30 * 60),
         ("After 1 hr", 60 * 60),
         ("After 2 hrs", 2 * 60 * 60),

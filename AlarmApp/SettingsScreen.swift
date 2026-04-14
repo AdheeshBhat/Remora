@@ -84,9 +84,7 @@ struct SettingsScreen: View {
                         .padding(.horizontal)
                         .padding(.bottom)
                     accountHeading
-                    if !isCaretaker {
-                        usernameSection
-                    }
+                    usernameSection
                     notificationRow
                     soundPicker
                     logoutButton
@@ -103,22 +101,16 @@ struct SettingsScreen: View {
             loadSettings()
             self.tempUseLightMode = appearance.useLightMode
             self.tempDefaultToCalendarView = appearance.defaultToCalendarView
-            firestoreManager.checkIfCaretaker { result in
+            // Always fetch username regardless of caretaker status
+            firestoreManager.getUsername { fetchedUsername in
                 DispatchQueue.main.async {
-                    self.isCaretaker = result
-                    if !result {
-                        firestoreManager.getUsername { fetchedUsername in
-                            DispatchQueue.main.async {
-                                if let fetchedUsername = fetchedUsername {
-                                    self.username = fetchedUsername
-                                } else {
-                                    self.username = ""
-                                }
-                            }
-                        }
+                    if let fetchedUsername = fetchedUsername {
+                        self.username = fetchedUsername
+                    } else {
+                        self.username = ""
                     }
                 }
-            }
+            }            
         }
     }
     

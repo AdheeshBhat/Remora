@@ -228,6 +228,22 @@ struct MissedRemindersView: View {
     @State private var selectedSeniorFilter: String = "All"
     @State private var showMissedOnly: Bool = true
     @State private var availableSeniors: [String] = ["All"]
+    @AppStorage("clearedMissedReminders") private var clearedRemindersData: String = ""
+
+    private func getClearedSet() -> Set<String> {
+        Set(clearedRemindersData.split(separator: "|").map { String($0) })
+    }
+
+    private func saveClearedSet(_ set: Set<String>) {
+        clearedRemindersData = set.joined(separator: "|")
+    }
+
+    private func clearReminder(_ reminder: MissedReminder) {
+        var set = getClearedSet()
+        set.insert(reminder.id)
+        saveClearedSet(set)
+        missedReminders.removeAll { $0.id == reminder.id }
+    }
 
     var body: some View {
         VStack {
@@ -283,6 +299,13 @@ struct MissedRemindersView: View {
                                 .foregroundColor(.secondary)
                         }
                         .padding(.vertical, 4)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                clearReminder(reminder)
+                            } label: {
+                                Label("Clear", systemImage: "checkmark")
+                            }
+                        }
                     }
                 }
             }
@@ -309,7 +332,7 @@ struct MissedRemindersView: View {
                         .fontWeight(.semibold)
                 }
                 .toggleStyle(SwitchToggleStyle(tint: .green))
-                .onChange(of: showMissedOnly) {
+                .onChange(of: showMissedOnly) { _, _ in
                     loadMissedReminders()
                 }
             }
@@ -373,11 +396,14 @@ struct MissedRemindersView: View {
                                 let delay = reminder.caretakerAlertDelay
                                 let deadline = scheduledDate.addingTimeInterval(delay)
 
+                                let id = "\(reminder.title)_\(scheduledDate.timeIntervalSince1970)_\(nameMap[uid] ?? "Unknown")"
+
                                 if reminder.repeatSettings.repeat_type == "None" {
                                     if !reminder.isComplete {
                                         let createdBy = reminder.creator
 
                                         let reminderItem = MissedReminder(
+                                            id: id,
                                             title: reminder.title,
                                             seniorName: nameMap[uid] ?? "Unknown",
                                             date: scheduledDate,
@@ -387,7 +413,6 @@ struct MissedRemindersView: View {
                                         )
                                         newMissed.append(reminderItem)
                                     }
-
                                 } else {
                                     let completed = reminder.completedInstances.contains {
                                         Calendar.current.isDate($0, inSameDayAs: scheduledDate)
@@ -396,6 +421,7 @@ struct MissedRemindersView: View {
                                         let createdBy = reminder.creator
 
                                         let reminderItem = MissedReminder(
+                                            id: id,
                                             title: reminder.title,
                                             seniorName: nameMap[uid] ?? "Unknown",
                                             date: scheduledDate,
@@ -410,6 +436,8 @@ struct MissedRemindersView: View {
                         }
 
                         var filtered = newMissed
+                        let clearedSet = getClearedSet()
+                        filtered = filtered.filter { !clearedSet.contains($0.id) }
 
                         if selectedSeniorFilter != "All" {
                             filtered = filtered.filter { $0.seniorName == selectedSeniorFilter }
@@ -432,7 +460,7 @@ struct MissedRemindersView: View {
 }
 
 struct MissedReminder: Identifiable {
-    let id = UUID()
+    let id: String   // stable ID
     let title: String
     let seniorName: String
     let date: Date
