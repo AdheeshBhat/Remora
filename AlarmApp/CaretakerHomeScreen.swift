@@ -393,8 +393,8 @@ struct MissedRemindersView: View {
                         for (uid, reminders) in results {
                             for (_, reminder) in reminders {
                                 let scheduledDate = reminder.date
-                                let delay = reminder.caretakerAlertDelay
-                                let deadline = scheduledDate.addingTimeInterval(delay)
+                                //let delay = reminder.caretakerAlertDelay
+                                let deadline = scheduledDate
 
                                 let id = "\(reminder.title)_\(scheduledDate.timeIntervalSince1970)_\(nameMap[uid] ?? "Unknown")"
 

@@ -312,6 +312,7 @@ struct CreateReminderScreen: View {
 // Helper to display caretaker alert delay as human-readable
 func humanReadableCaretakerDelay(_ delay: TimeInterval) -> String {
     switch Int(delay) {
+    case 60: return "1 min"
     case 600: return "10 mins"
     case 1800: return "30 mins"
     case 3600: return "1 hr"
