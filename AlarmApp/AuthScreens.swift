@@ -157,9 +157,10 @@ struct LoginScreen: View {
                 // Ensure username -> UID mapping exists (fixes old accounts)
                 firestoreManager.ensureUsernameMappingExists()
                 
-                // Store FCM token for push notifications
+                // Store FCM token and timezone for push notifications
                 if let uid = authResult?.user.uid {
                     PushNotificationManager.shared.storeFCMToken(for: uid)
+                    firestoreManager.updateCurrentUserTimezone()
                 }
 
                 // Navigate to HomeScreen
@@ -300,7 +301,8 @@ struct RegistrationScreen: View {
                             "username": username,
                             "isCaretaker": isCaretaker,
                             "email": email,
-                            "uid": user.uid
+                            "uid": user.uid,
+                            "timezone": TimeZone.current.identifier
                         ]
                         firestoreManager.saveUserData(userId: user.uid, data: userData) { error in
                             if let error = error {

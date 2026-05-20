@@ -8,8 +8,8 @@
 
 import SwiftUI
 
-struct CalendarReminder: Identifiable {
-    let id: UUID
+struct CalendarReminder: Identifiable, Equatable {
+    let id: String
     let title: String
     let date: Date
 }
@@ -101,16 +101,19 @@ class CalendarViewModel: ObservableObject {
     func loadReminders(from allReminders: [String: ReminderData]) {
         var grouped: [Date: [CalendarReminder]] = [:]
         
-        // Expand repeating reminders for a wide date range (1 year)
-        let startDate = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
-        let endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+        // Expand repeating reminders for a wide date range to cover calendar swiping (±6 years)
+        let startDate = Calendar.current.date(byAdding: .year, value: -6, to: Date()) ?? Date()
+        let endDate = Calendar.current.date(byAdding: .year, value: 6, to: Date()) ?? Date()
         
         let expandedReminders = expandRepeatingRemindersForCalendar(userData: allReminders, startDate: startDate, endDate: endDate)
 
         for (_, reminder) in expandedReminders {
             let dateKey = normalizeDate(reminder.date)
-            let simpleReminder = CalendarReminder(id: UUID(), title: reminder.title, date: reminder.date)
-
+            let simpleReminder = CalendarReminder(
+                id: "\(reminder.title)_\(reminder.date.timeIntervalSince1970)",
+                title: reminder.title,
+                date: reminder.date
+            )
             grouped[dateKey, default: []].append(simpleReminder)
         }
 
@@ -181,6 +184,7 @@ struct CalendarView: View {
     @Binding var initialViewType: String
 
     @StateObject var viewModel = CalendarViewModel()
+    @Environment(\.scenePhase) private var scenePhase
     let helper = CalendarHelper()
     @State private var calendarViewType: String = "month"
     @State private var isCalendarViewOn: Bool = true
@@ -200,7 +204,7 @@ struct CalendarView: View {
     @State private var goToReminders = false
     @State private var listFilter: String = "week"
     
-    var preloadedReminders: [String: ReminderData]? = nil
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     let firestoreManager: FirestoreManager
 
     let minZoom: CGFloat = 1.0
@@ -542,18 +546,17 @@ struct CalendarView: View {
             calendarViewType = initialViewType
             isCalendarViewOn = true
             
-            if let preloadedReminders = preloadedReminders {
-                viewModel.loadReminders(from: preloadedReminders)
-            } else {
-                firestoreManager.getRemindersForUser { fetchedReminders in
-                    if let fetchedReminders = fetchedReminders {
-                        viewModel.loadReminders(from: fetchedReminders)
-                    }
-                }
-            }
+            preloadedReminders.preloadedReminders = nil
+            
+            reloadReminders(forceRemote: false)
             
             weekFilteredDay = viewModel.selectedDate
             cur_screen = .CalendarScreen
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                reloadReminders(forceRemote: true)
+            }
         }
         .onChange(of: calendarViewType) { _, newValue in
             initialViewType = newValue
@@ -570,16 +573,11 @@ struct CalendarView: View {
             // Update calendar view for the new month
             swipeOffset = helper.calculateMonthOffset(from: newDate)
             canResetDate = swipeOffset != 0
-            // Optionally, reload reminders if needed
-            if let preloadedReminders = preloadedReminders {
-                viewModel.loadReminders(from: preloadedReminders)
-            } else {
-                firestoreManager.getRemindersForUser { fetchedReminders in
-                    if let fetchedReminders = fetchedReminders {
-                        viewModel.loadReminders(from: fetchedReminders)
-                    }
-                }
-            }
+            // Force remote reload of reminders
+            reloadReminders(forceRemote: true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: FirestoreManager.remindersChangedNotification)) { _ in
+            reloadReminders(forceRemote: true)
         }
 
     }
@@ -606,6 +604,32 @@ struct CalendarView: View {
             return weekString(from: today)
         } else {
             return ""
+        }
+    }
+    
+    private func reloadReminders(forceRemote: Bool = false) {
+        if forceRemote {
+            preloadedReminders.preloadedReminders = nil
+        }
+
+        if !forceRemote {
+            if let cached = preloadedReminders.preloadedReminders {
+                viewModel.loadReminders(from: cached)
+                firestoreManager.getRemindersForUser { fetched in
+                    guard let fetched = fetched else { return }
+                    DispatchQueue.main.async {
+                        self.viewModel.loadReminders(from: fetched)
+                    }
+                }
+                return
+            }
+        }
+
+        firestoreManager.getRemindersForUser { fetched in
+            guard let fetched = fetched else { return }
+            DispatchQueue.main.async {
+                self.viewModel.loadReminders(from: fetched)
+            }
         }
     }
 }

@@ -37,6 +37,7 @@ struct SettingsScreen: View {
     @State private var isDropdownVisible = false
     @State var selectedSound: String = ""
     @State private var showLogoutAlert = false
+    @State private var showDeleteAccountAlert = false
     @State private var isCaretaker = false
     @State private var useLightMode: Bool = true
     @State private var username: String = ""
@@ -87,13 +88,14 @@ struct SettingsScreen: View {
                     usernameSection
                     notificationRow
                     soundPicker
-                    logoutButton
                     
                 }
             }
+            logoutButton
+                .padding(.top)
+                .padding(.bottom)
             saveSettingsButton
                 .padding(.bottom)
-                .padding(.top)
             navBar
         }
         .onAppear {
@@ -110,7 +112,54 @@ struct SettingsScreen: View {
                         self.username = ""
                     }
                 }
-            }            
+            }
+        }
+        .alert("Delete Account", isPresented: $showDeleteAccountAlert) {
+            Button("Cancel", role: .cancel) { }
+
+            Button("Delete", role: .destructive) {
+                let deletingUID = Auth.auth().currentUser?.uid ?? ""
+
+                firestoreManager.checkIfCaretaker { isCaretaker in
+                    cancelScheduledNotifications(
+                        caretakerId: isCaretaker ? deletingUID : nil,
+                        seniorId: isCaretaker ? nil : deletingUID
+                    ) {
+                        firestoreManager.deleteScheduledNotificationsForAccount(
+                            uid: deletingUID,
+                            isCaretaker: isCaretaker
+                        ) { scheduledDeleteResult in
+                            if case .failure(let error) = scheduledDeleteResult {
+                                print("Failed to delete scheduled notifications: \(error.localizedDescription)")
+                            }
+
+                            firestoreManager.deleteCurrentUserAccount { result in
+                                DispatchQueue.main.async {
+                                    switch result {
+                                    case .success:
+                                        do {
+                                            try Auth.auth().signOut()
+                                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                               let window = windowScene.windows.first {
+                                                window.rootViewController = UIHostingController(
+                                                    rootView: ContentView().environmentObject(appearance)
+                                                )
+                                            }
+                                        } catch {
+                                            print("Error signing out: \(error.localizedDescription)")
+                                        }
+
+                                    case .failure(let error):
+                                        print("Failed to delete account: \(error.localizedDescription)")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } message: {
+            Text("This will permanently delete your account and all associated data. Are you sure?")
         }
     }
     
@@ -187,22 +236,23 @@ extension SettingsScreen {
             .padding(.horizontal)
             .padding(.bottom)
             
-            // Manage Account button
-            NavigationLink(destination: ManageAccountScreen(firestoreManager: firestoreManager)) {
-                Text("Manage Account")
+            Button(action: {
+                showDeleteAccountAlert = true
+            }) {
+                Text("Delete Account")
                     .font(.headline)
                     .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                    .padding(.vertical, 12) // reduce vertical padding
-                    .padding(.horizontal, 16) // match other rectangles
-                    .frame(maxWidth: .infinity, alignment: .leading) // expand full width
+                    .foregroundColor(.red)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.blue.opacity(0.1))
                     .cornerRadius(12)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                     )
-                    .padding(.horizontal) // add space from screen edges
+                    .padding(.horizontal)
             }
         }
         .padding(.bottom)

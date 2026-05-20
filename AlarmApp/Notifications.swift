@@ -337,3 +337,47 @@ func cancelAllNotificationsForCurrentUser() {
 
     print("🔕 All notifications cancelled for current user")
 }
+
+func cancelScheduledNotifications(caretakerId: String? = nil, seniorId: String? = nil, completion: (() -> Void)? = nil) {
+    let center = UNUserNotificationCenter.current()
+    let group = DispatchGroup()
+
+    func matches(_ userInfo: [AnyHashable: Any]) -> Bool {
+        let requestCaretakerId = userInfo["caretakerId"] as? String
+        let requestSeniorId = userInfo["seniorId"] as? String
+
+        if let caretakerId, !caretakerId.isEmpty, requestCaretakerId == caretakerId {
+            return true
+        }
+
+        if let seniorId, !seniorId.isEmpty, requestSeniorId == seniorId {
+            return true
+        }
+
+        return false
+    }
+
+    group.enter()
+    center.getPendingNotificationRequests { requests in
+        let identifiers = requests
+            .filter { matches($0.content.userInfo) }
+            .map(\.identifier)
+
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        group.leave()
+    }
+
+    group.enter()
+    center.getDeliveredNotifications { notifications in
+        let identifiers = notifications
+            .filter { matches($0.request.content.userInfo) }
+            .map { $0.request.identifier }
+
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+        group.leave()
+    }
+
+    group.notify(queue: .main) {
+        completion?()
+    }
+}

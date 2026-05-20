@@ -6,6 +6,7 @@ admin.initializeApp();
 const MAX_OCCURRENCES = 100;
 const DEFAULT_CARETAKER_DELAY_MS = 1800 * 1000; // 30 minutes
 
+
 const WEEKDAY_MAP = {
   Mon: 1,
   Tue: 2,
@@ -15,6 +16,88 @@ const WEEKDAY_MAP = {
   Sat: 6,
   Sun: 0,
 };
+
+// ============================================================================
+// Timezone Helper Functions
+// ============================================================================
+
+function toDate(value) {
+  return value && value.toDate ? value.toDate() : new Date(value);
+}
+
+function getUserTimezone(userData) {
+  return userData.timezone || "America/Los_Angeles";
+}
+
+function getZonedParts(date, timezone) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const parts = Object.fromEntries(
+      formatter.formatToParts(date).map(part => [part.type, part.value]),
+  );
+
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+    weekday: WEEKDAY_MAP[parts.weekday],
+  };
+}
+
+function makeDateInTimezone(year, monthIndex, day, hour, minute, timezone) {
+  const targetUTC = Date.UTC(year, monthIndex, day, hour, minute, 0, 0);
+  let guess = new Date(targetUTC);
+
+  for (let i = 0; i < 2; i++) {
+    const parts = getZonedParts(guess, timezone);
+    const actualUTC = Date.UTC(
+        parts.year,
+        parts.month - 1,
+        parts.day,
+        parts.hour,
+        parts.minute,
+        parts.second,
+        0,
+    );
+
+    guess = new Date(guess.getTime() - (actualUTC - targetUTC));
+  }
+
+  return guess;
+}
+
+function normalizeMinute(date) {
+  const normalized = new Date(date.getTime());
+  normalized.setSeconds(0);
+  normalized.setMilliseconds(0);
+  return normalized;
+}
+
+function sameZonedDay(d1, d2, timezone) {
+  const p1 = getZonedParts(d1, timezone);
+  const p2 = getZonedParts(d2, timezone);
+
+  return p1.year === p2.year &&
+         p1.month === p2.month &&
+         p1.day === p2.day;
+}
+
+function lastDayOfZonedMonth(year, monthIndex) {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
 
 // ============================================================================
 // Main Firestore Trigger
@@ -33,6 +116,7 @@ exports.scheduleReminderNotification =
               .get();
 
           const userData = userDocEarly.data();
+          const userTimezone = getUserTimezone(userData || {});
 
             //reminder does NOT exist after the change OR it's complete -> cancel it
             // deleting a reminder fully
@@ -48,11 +132,11 @@ exports.scheduleReminderNotification =
               const beforeData = change.before.data();
               const afterData = change.after.data();
 
-              const beforeDeleted = (beforeData.deletedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
-              const afterDeleted = (afterData.deletedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+              const beforeDeleted = (beforeData.deletedInstances || []).map(toDate);
+              const afterDeleted = (afterData.deletedInstances || []).map(toDate);
 
-              const beforeCompleted = (beforeData.completedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
-              const afterCompleted = (afterData.completedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+              const beforeCompleted = (beforeData.completedInstances || []).map(toDate);
+              const afterCompleted = (afterData.completedInstances || []).map(toDate);
 
               const findAdded = (beforeArr, afterArr) => {
                 return afterArr.find(a =>
@@ -70,7 +154,7 @@ exports.scheduleReminderNotification =
               const deletedInstance = findAdded(beforeDeleted, afterDeleted);
               if (deletedInstance) {
                 console.log("🗑️ Deleting instance:", deletedInstance.toISOString());
-                await cancelSingleInstance(userId, reminderId, deletedInstance);
+                await cancelSingleInstance(userId, reminderId, deletedInstance, userTimezone);
                 return null;
               }
 
@@ -78,7 +162,7 @@ exports.scheduleReminderNotification =
               const completedInstance = findAdded(beforeCompleted, afterCompleted);
               if (completedInstance) {
                 console.log("✅ Completing instance:", completedInstance.toISOString());
-                await cancelSingleInstance(userId, reminderId, completedInstance);
+                await cancelSingleInstance(userId, reminderId, completedInstance, userTimezone);
                 return null;
               }
 
@@ -90,10 +174,9 @@ exports.scheduleReminderNotification =
                 const reminder = change.after.data();
 
                 // Normalize time to match stored occurrences
-                uncompletedInstance.setSeconds(0);
-                uncompletedInstance.setMilliseconds(0);
+                const normalizedUncompletedInstance = normalizeMinute(uncompletedInstance);
 
-                const delay = uncompletedInstance.getTime() - Date.now();
+                const delay = normalizedUncompletedInstance.getTime() - Date.now();
 
                 if (delay > 0 && !userData.isCaretaker) {
                   // Schedule main notification
@@ -103,7 +186,8 @@ exports.scheduleReminderNotification =
                     reminder.description,
                     delay,
                     reminderId,
-                    uncompletedInstance
+                    normalizedUncompletedInstance,
+                    {seniorId: userId, timezone: userTimezone}
                   );
 
                   // Follow-up
@@ -120,7 +204,8 @@ exports.scheduleReminderNotification =
                     `Make sure to mark "${reminder.title}" as done!`,
                     followUpDelay,
                     `${reminderId}-follow-up`,
-                    uncompletedInstance
+                    normalizedUncompletedInstance,
+                    {seniorId: userId, timezone: userTimezone}
                   );
 
                   // Caretaker notification
@@ -135,7 +220,8 @@ exports.scheduleReminderNotification =
                         `"${reminder.title}" is not finished yet.`,
                         caretakerDelay,
                         reminderId,
-                        uncompletedInstance
+                        normalizedUncompletedInstance,
+                        {seniorId: userId, caretakerId, timezone: userTimezone}
                       );
                     }
                   }
@@ -168,15 +254,9 @@ exports.scheduleReminderNotification =
               repeatSettings.repeatIntervals;
 
           const deletedInstances =
-              (reminder.deletedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
+              (reminder.deletedInstances || []).map(toDate);
           const completedInstances =
-              (reminder.completedInstances || []).map(ts => ts.toDate ? ts.toDate() : new Date(ts));
-
-          const isSameDay = (d1, d2) => {
-            return d1.getFullYear() === d2.getFullYear() &&
-                   d1.getMonth() === d2.getMonth() &&
-                   d1.getDate() === d2.getDate();
-          };
+              (reminder.completedInstances || []).map(toDate);
 
 
           // If this document belongs to a caretaker,
@@ -191,6 +271,7 @@ exports.scheduleReminderNotification =
               repeatType,
               repeatUntil,
               repeatIntervals,
+              userTimezone,
           );
 
           for (const occurrenceDate of occurrences) {
@@ -200,8 +281,8 @@ exports.scheduleReminderNotification =
             if (delay < 0) continue;
 
             // Skip deleted or completed instances
-            const isDeleted = deletedInstances.some(d => isSameDay(d, occurrenceDate));
-            const isCompleted = completedInstances.some(d => isSameDay(d, occurrenceDate));
+            const isDeleted = deletedInstances.some(d => sameZonedDay(d, occurrenceDate, userTimezone));
+            const isCompleted = completedInstances.some(d => sameZonedDay(d, occurrenceDate, userTimezone));
 
             if (isDeleted || isCompleted) {
               console.log("⏭️ Skipping instance:", occurrenceDate.toISOString(),
@@ -211,8 +292,7 @@ exports.scheduleReminderNotification =
 
               // for delay and occurrenceDate, drop the second
               // Force notifications to trigger exactly at :00 seconds
-              occurrenceDate.setSeconds(0);
-              occurrenceDate.setMilliseconds(0);
+              const normalizedOccurrenceDate = normalizeMinute(occurrenceDate);
               
               // Schedule senior reminder
               if (!userData.isCaretaker) {
@@ -222,7 +302,8 @@ exports.scheduleReminderNotification =
                       description,
                       delay,
                       reminderId,
-                      occurrenceDate,
+                      normalizedOccurrenceDate,
+                      {seniorId: userId, timezone: userTimezone},
                   );
                   
                   // Schedule follow-up notification for the senior
@@ -247,7 +328,8 @@ exports.scheduleReminderNotification =
                       followUpBody,
                       followUpDelay,
                       `${reminderId}-follow-up`,
-                      occurrenceDate,
+                      normalizedOccurrenceDate,
+                      {seniorId: userId, timezone: userTimezone},
                   );
                   
               }
@@ -276,7 +358,8 @@ exports.scheduleReminderNotification =
                       caretakerBody,
                       caretakerDelay,
                       reminderId,
-                      occurrenceDate,
+                      normalizedOccurrenceDate,
+                      {seniorId: userId, caretakerId, timezone: userTimezone},
                   );
                 }
               }
@@ -298,58 +381,63 @@ function generateOccurrences(
     repeatType,
     repeatUntil,
     repeatIntervals,
+    timezone,
 ) {
     const occurrences = [];
-    const now = new Date();
-    now.setSeconds(0);
-    now.setMilliseconds(0);
-    startDate.setSeconds(0);
-    startDate.setMilliseconds(0);
-    
-    let currentDate = new Date(startDate);
-    const endDate = parseEndDate(repeatUntil);
+    const now = normalizeMinute(new Date());
+    const normalizedStartDate = normalizeMinute(startDate);
+
+    let currentDate = new Date(normalizedStartDate);
+    const endDate = parseEndDate(repeatUntil, timezone);
+
+    // Capture the intended local day-of-month once from the original start date.
+    // This keeps "31st of each month" as 31, then clamps only when needed.
+    const originalParts = getZonedParts(normalizedStartDate, timezone);
+    const originalDay = originalParts.day;
 
     while (currentDate < now) {
         currentDate = getNextOccurrence(
             currentDate,
             repeatType,
             repeatIntervals,
+            originalDay,
+            timezone,
         );
         if (!currentDate) break;
     }
 
-  let count = 0;
+    let count = 0;
 
-  while (count < MAX_OCCURRENCES &&
-      currentDate) {
-    if (endDate && currentDate > endDate) break;
-      console.log("📅 Occurrence generated:", currentDate.toISOString());
-    occurrences.push(new Date(currentDate));
+    while (count < MAX_OCCURRENCES && currentDate) {
+        if (endDate && currentDate > endDate) break;
+        console.log("📅 Occurrence generated:", currentDate.toISOString());
+        occurrences.push(new Date(currentDate));
 
-    currentDate = getNextOccurrence(
-        currentDate,
-        repeatType,
-        repeatIntervals,
-    );
+        currentDate = getNextOccurrence(
+            currentDate,
+            repeatType,
+            repeatIntervals,
+            originalDay,
+            timezone,
+        );
 
-    count++;
-  }
+        count++;
+    }
 
-  return occurrences;
+    return occurrences;
 }
 
 /**
  * Parses repeat-until date.
  */
-function parseEndDate(repeatUntil) {
+function parseEndDate(repeatUntil, timezone) {
   if (!repeatUntil ||
       repeatUntil === "Forever") {
     return null;
   }
-    const [year,month,day] = repeatUntil.split("-").map(Number)
-  const endDate = new Date(Date.UTC(year, (month - 1), day, 23, 59, 59, 999));
-    //console.log(endDate);
-  return endDate;
+
+  const [year, month, day] = repeatUntil.split("-").map(Number);
+  return makeDateInTimezone(year, month - 1, day, 23, 59, timezone);
 }
 
 /**
@@ -359,91 +447,174 @@ function getNextOccurrence(
     date,
     repeatType,
     repeatIntervals,
+    originalDay = null,
+    timezone,
 ) {
-    const next = new Date(date);
-    next.setSeconds(0);
-    next.setMilliseconds(0);
+    const next = normalizeMinute(date);
+    const parts = getZonedParts(next, timezone);
+
     switch (repeatType) {
         case "None":
             return null;
 
         case "Daily":
-            next.setDate(next.getDate() + 1);
-            return next;
+            return makeDateInTimezone(
+                parts.year,
+                parts.month - 1,
+                parts.day + 1,
+                parts.hour,
+                parts.minute,
+                timezone,
+            );
 
         case "Weekly":
-            next.setDate(next.getDate() + 7);
-            return next;
+            return makeDateInTimezone(
+                parts.year,
+                parts.month - 1,
+                parts.day + 7,
+                parts.hour,
+                parts.minute,
+                timezone,
+            );
 
-        case "Monthly":
-            next.setMonth(next.getMonth() + 1);
-            return next;
+        case "Monthly": {
+            const intendedDay = originalDay ?? parts.day;
+            let targetYear = parts.year;
+            let targetMonthIndex = parts.month;
 
-        case "Yearly":
-            next.setFullYear(next.getFullYear() + 1);
-            return next;
-
-        case "Custom":
-            if (!repeatIntervals ||
-                !repeatIntervals.days) {
-                return null;
+            if (targetMonthIndex > 11) {
+                targetMonthIndex = 0;
+                targetYear += 1;
             }
 
-            return calculateNextCustomDate(
-                date,
-                repeatIntervals.days,
+            const lastDayOfTargetMonth =
+                lastDayOfZonedMonth(targetYear, targetMonthIndex);
+            const clampedDay = Math.min(intendedDay, lastDayOfTargetMonth);
+
+            return makeDateInTimezone(
+                targetYear,
+                targetMonthIndex,
+                clampedDay,
+                parts.hour,
+                parts.minute,
+                timezone,
             );
+        }
+
+        case "Yearly":
+            return makeDateInTimezone(
+                parts.year + 1,
+                parts.month - 1,
+                parts.day,
+                parts.hour,
+                parts.minute,
+                timezone,
+            );
+
+        case "Custom":
+            if (!repeatIntervals || !repeatIntervals.days) {
+                return null;
+            }
+            return calculateNextCustomDate(date, repeatIntervals.days, timezone);
 
         default:
             return null;
     }
 }
 
-/**
- * Calculates next custom repeat date.
- */
-function calculateNextCustomDate(
-    baseDate,
-    daysString,
-) {
-  const patterns =
-      daysString.split(",")
-          .map((p) => p.trim());
-
-  const hour = baseDate.getHours();
-  const minute = baseDate.getMinutes();
-
-  let nextDate = null;
-
-  for (const pattern of patterns) {
-    const candidate =
-        findNextPatternOccurrence(
-            pattern,
-            baseDate,
-            hour,
-            minute,
-        );
-
-    if (candidate &&
-        (!nextDate || candidate < nextDate)) {
-      nextDate = candidate;
-    }
-  }
-
-  return nextDate;
+function isNumeric(str) {
+  return /^\d+$/.test(str);
 }
 
 /**
- * Finds next ordinal weekday occurrence.
+ * Calculates next custom repeat date.
+ * Supports both:
+ *  - numeric day-of-month patterns (ex. "1", "7", "31")
+ *  - legacy ordinal weekday patterns (ex. "1st Mon")
  */
+function calculateNextCustomDate(baseDate, daysString, timezone) {
+  const patterns = daysString
+    .split(",")
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  const normalizeDayOfMonth = (p) => {
+    if (!p) return p;
+    return p.toLowerCase().replace(/(st|nd|rd|th)$/g, '');
+  };
+
+  const baseParts = getZonedParts(baseDate, timezone);
+  const hour = baseParts.hour;
+  const minute = baseParts.minute;
+
+  let nextDate = null;
+
+  for (let monthOffset = 0; monthOffset < 12; monthOffset++) {
+    let year = baseParts.year;
+    let month = (baseParts.month - 1) + monthOffset;
+
+    while (month > 11) {
+      month -= 12;
+      year += 1;
+    }
+
+    const lastDayOfMonth = lastDayOfZonedMonth(year, month);
+    for (const pattern of patterns) {
+      const normalizedPattern = normalizeDayOfMonth(pattern);
+
+      if (isNumeric(normalizedPattern)) {
+        const requestedDay = parseInt(normalizedPattern);
+        const clampedDay = Math.min(requestedDay, lastDayOfMonth);
+
+        const candidate = makeDateInTimezone(
+          year,
+          month,
+          clampedDay,
+          hour,
+          minute,
+          timezone,
+        );
+
+        if (
+          candidate > baseDate &&
+          (!nextDate || candidate < nextDate)
+        ) {
+          nextDate = candidate;
+        }
+
+        continue;
+      }
+
+      // Legacy ordinal weekday pattern — unchanged
+      const candidate = findNextPatternOccurrence(
+        pattern,
+        baseDate,
+        hour,
+        minute,
+        timezone,
+      );
+
+      if (
+        candidate &&
+        (!nextDate || candidate < nextDate)
+      ) {
+        nextDate = candidate;
+      }
+    }
+  }
+  return nextDate;
+}
+
+
+// Finds next ordinal weekday occurrence.
 function findNextPatternOccurrence(
     pattern,
     baseDate,
     hour,
     minute,
-) {
-    baseDate.setSeconds(0);
-    baseDate.setMilliseconds(0);
+    timezone,
+  ) {
+  const normalizedBaseDate = normalizeMinute(baseDate);
   const parts = pattern.split(" ");
   if (parts.length !== 2) return null;
 
@@ -461,16 +632,17 @@ function findNextPatternOccurrence(
     monthOffset++) {
     const occurrence =
         findNthWeekdayInMonth(
-            baseDate,
+            normalizedBaseDate,
             monthOffset,
             weekday,
             ordinalNum,
             hour,
             minute,
+            timezone,
         );
 
     if (occurrence &&
-        occurrence > baseDate) {
+        occurrence > normalizedBaseDate) {
       return occurrence;
     }
   }
@@ -499,40 +671,38 @@ function findNthWeekdayInMonth(
     ordinalNum,
     hour,
     minute,
+    timezone,
 ) {
-    baseDate.setSeconds(0);
-    baseDate.setMilliseconds(0);
-  const targetMonth = new Date(baseDate);
-  targetMonth.setMonth(
-      targetMonth.getMonth() +
-      monthOffset,
-  );
-  targetMonth.setDate(1);
+  const normalizedBaseDate = normalizeMinute(baseDate);
+  const baseParts = getZonedParts(normalizedBaseDate, timezone);
 
+  let targetYear = baseParts.year;
+  let targetMonthIndex = (baseParts.month - 1) + monthOffset;
+
+  while (targetMonthIndex > 11) {
+    targetMonthIndex -= 12;
+    targetYear += 1;
+  }
+
+  const lastDay = lastDayOfZonedMonth(targetYear, targetMonthIndex);
   let count = 0;
 
-  for (let day = 1;
-    day <= 31;
-    day++) {
-    const testDate =
-        new Date(targetMonth);
-    testDate.setDate(day);
+  for (let day = 1; day <= lastDay; day++) {
+    const testDate = makeDateInTimezone(
+        targetYear,
+        targetMonthIndex,
+        day,
+        hour,
+        minute,
+        timezone,
+    );
 
-    if (testDate.getMonth() !==
-        targetMonth.getMonth()) {
-      break;
-    }
+    const testParts = getZonedParts(testDate, timezone);
 
-    if (testDate.getDay() ===
-        weekday) {
+    if (testParts.weekday === weekday) {
       count++;
-      if (count === ordinalNum) {
-        testDate.setHours(
-            hour,
-            minute,
-            0,
-            0,
-        );
+      if (count === ordinalNum &&
+          testParts.month === targetMonthIndex + 1) {
         return testDate;
       }
     }
@@ -552,13 +722,15 @@ async function scheduleNotification(
     delay,
     reminderId,
     occurrenceDate,
+    metadata = {},
 ) {
   const userDoc = await admin.firestore()
       .collection("users")
       .doc(userId)
       .get();
 
-  const fcmToken = userDoc.data().fcmToken;
+  const scheduledUserData = userDoc.data() || {};
+  const fcmToken = scheduledUserData.fcmToken;
 
   if (!fcmToken) return;
 
@@ -573,6 +745,9 @@ async function scheduleNotification(
         title,
         body,
         reminderId,
+        seniorId: metadata.seniorId || "",
+        caretakerId: metadata.caretakerId || "",
+        timezone: metadata.timezone || scheduledUserData.timezone || "America/Los_Angeles",
         occurrenceDate:
             admin.firestore.Timestamp
                 .fromDate(occurrenceDate),
@@ -614,17 +789,11 @@ async function cancelScheduledNotifications(
 // ============================================================================
 // Cancels notifications for ONE specific occurrence
 
-async function cancelSingleInstance(userId, reminderId, occurrenceDate) {
+async function cancelSingleInstance(userId, reminderId, occurrenceDate, timezone) {
   const snapshot = await admin.firestore()
     .collection("scheduledNotifications")
     .where("userId", "==", userId)
     .get();
-
-  const isSameDay = (d1, d2) => {
-    return d1.getFullYear() === d2.getFullYear() &&
-           d1.getMonth() === d2.getMonth() &&
-           d1.getDate() === d2.getDate();
-  };
 
   const docsToDelete = snapshot.docs.filter((doc) => {
     const data = doc.data();
@@ -638,7 +807,7 @@ async function cancelSingleInstance(userId, reminderId, occurrenceDate) {
 
     const occDate = data.occurrenceDate.toDate();
 
-    return isSameDay(occDate, occurrenceDate);
+    return sameZonedDay(occDate, occurrenceDate, timezone);
   });
 
   const batch = admin.firestore().batch();
@@ -689,6 +858,9 @@ exports.sendScheduledNotifications =
               title,
               body,
               reminderId,
+              seniorId,
+              caretakerId,
+              timezone,
             } = doc.data();
 
             try {
@@ -701,12 +873,17 @@ exports.sendScheduledNotifications =
                     },
                     data: {
                       reminderId,
+                      title: title || "",
+                      body: body || "",
+                      seniorId: seniorId || "",
+                      caretakerId: caretakerId || "",
+                      timezone: timezone || "America/Los_Angeles",
                     },
                     apns: {
                       payload: {
                         aps: {
                           sound: "default",
-                          badge: 1,
+                          badge: 0,
                         },
                       },
                     },

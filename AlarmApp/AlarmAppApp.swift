@@ -11,6 +11,11 @@ import FirebaseMessaging
 import UserNotifications
 import FirebaseAppCheck
 
+class PreloadedReminders: ObservableObject {
+    @Published var preloadedReminders: [String: ReminderData]? = nil
+
+}
+
 @main
 struct AlarmAppApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -18,6 +23,7 @@ struct AlarmAppApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var appearance: AppearanceModel
     @State private var authHandle: AuthStateDidChangeListenerHandle?
+    @StateObject var preloadedReminders = PreloadedReminders()
     
     init() {
         let appearanceModel = AppearanceModel()
@@ -29,9 +35,16 @@ struct AlarmAppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appearance)
+                .environmentObject(preloadedReminders)
                 .preferredColorScheme(appearance.useLightMode ? .light : .dark)
                 .onAppear {
                     setupAuthListener()
+                    UNUserNotificationCenter.current().setBadgeCount(0) { error in
+                        if let error = error {
+                            print("Failed to set badge count: \(error)")
+                        }
+                    }
+                    
                     // Only register for push notifications after user login
                     if Auth.auth().currentUser != nil {
                         PushNotificationManager.shared.registerForPushNotifications()
@@ -83,3 +96,4 @@ final class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate 
         completionHandler()
     }
 }
+

@@ -14,17 +14,12 @@ struct MonthDayCellView: View {
     let zoomScale: CGFloat
     let isReminderViewOn: Bool
     @Binding var cur_screen: Screen
-    @State private var remindersForUser: [String: ReminderData] = [:]
 
     let firestoreManager: FirestoreManager
 
     // Helper to safely fetch ReminderData for a normalized date
     private func reminderData(for reminder: CalendarReminder) -> ReminderData? {
-        let normalizedDate = normalizeDate(reminder.date)
-        return remindersForUser.values.first(where: {
-            normalizeDate($0.date) == normalizedDate &&
-            $0.title == reminder.title
-        })
+        return nil
     }
 
     var body: some View {
@@ -58,11 +53,6 @@ struct MonthDayCellView: View {
             RoundedRectangle(cornerRadius: 4)
                 .stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
         )
-        .onAppear {
-            firestoreManager.getRemindersForUser { fetched in
-                remindersForUser = fetched ?? [:]
-            }
-        }
     }
     
 
@@ -123,17 +113,12 @@ struct WeekDayCellView: View {
     let cellHeight: CGFloat
     let isReminderViewOn: Bool
     @Binding var cur_screen: Screen
-    @State private var remindersForUser: [String: ReminderData] = [:]
 
     let firestoreManager: FirestoreManager
 
     // Helper to safely fetch ReminderData for a normalized date
     private func reminderData(for reminder: CalendarReminder) -> ReminderData? {
-        let normalizedDate = normalizeDate(reminder.date)
-        return remindersForUser.values.first(where: {
-            normalizeDate($0.date) == normalizedDate &&
-            $0.title == reminder.title
-        })
+        return nil
     }
 
     var body: some View {
@@ -167,11 +152,6 @@ struct WeekDayCellView: View {
                 .stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
         )
         .padding(1)
-        .onAppear {
-            firestoreManager.getRemindersForUser() { fetched in
-                remindersForUser = fetched ?? [:]
-            }
-        }
     }
 }
 
@@ -205,3 +185,4 @@ struct ReminderCell: View {
         }
     }
 }
+

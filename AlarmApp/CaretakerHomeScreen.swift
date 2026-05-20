@@ -15,6 +15,12 @@ struct CaretakerHomeView: View {
     @State private var selectedSeniorUID: String? = nil
     @State private var displayedName: String = ""
     @State private var showingMissedDashboard = false
+    @State private var hasNewMissedReminders: Bool = false
+    @AppStorage("clearedMissedReminders") private var clearedMissedRemindersData: String = ""
+    private func getClearedSet() -> Set<String> {
+        Set(clearedMissedRemindersData.split(separator: "|").map { String($0) })
+    }
+
 
     var body: some View {
         VStack {
@@ -25,13 +31,18 @@ struct CaretakerHomeView: View {
                 Button(action: {
                     showingMissedDashboard = true
                 }) {
-                    Image(systemName: "bell.badge")
+                    Image(systemName: hasNewMissedReminders ? "bell.badge.fill" : "bell")
                         .font(.title)
                         .fontWeight(.medium)
                         .foregroundColor(.blue.opacity(0.7))
                 }
                 .navigationDestination(isPresented: $showingMissedDashboard) {
                     MissedRemindersView(firestoreManager: firestoreManager)
+                }
+                .onChange(of: showingMissedDashboard) { _, newValue in
+                    if newValue {
+                        hasNewMissedReminders = false
+                    }
                 }
 
                 Spacer()
@@ -127,6 +138,42 @@ struct CaretakerHomeView: View {
                     self.seniors = names
                 }
             }
+            firestoreManager.getLinkedSeniorUIDs { seniorUIDs in
+                firestoreManager.getRemindersForMultipleUsers(uids: seniorUIDs) { results in
+                    
+                    let now = Date()
+                    var hasMissed = false
+
+                    // Build UID -> firstName map for better ID generation
+                    var nameMap: [String: String] = [:]
+                    let group = DispatchGroup()
+                    for uid in seniorUIDs {
+                        group.enter()
+                        firestoreManager.getUserFirstName(forUID: uid) { name in
+                            nameMap[uid] = name ?? "Unknown"
+                            group.leave()
+                        }
+                    }
+                    group.notify(queue: .main) {
+                        for (uid, reminders) in results {
+                            for (_, reminder) in reminders {
+                                let id = "\(reminder.title)_\(reminder.date.timeIntervalSince1970)_\(nameMap[uid] ?? "Unknown")"
+                                let isCleared = getClearedSet().contains(id)
+                                let isMissed = reminder.date < now && !reminder.isComplete && !isCleared
+
+                                if isMissed {
+                                    hasMissed = true
+                                    break
+                                }
+                            }
+                            if hasMissed { break }
+                        }
+                        DispatchQueue.main.async {
+                            self.hasNewMissedReminders = hasMissed
+                        }
+                    }
+                }
+            }
         }
         // Navigate to senior's version of the app (HomeView)
         .background(
@@ -184,6 +231,12 @@ struct AddSeniorView: View {
             .foregroundColor(.white)
             .cornerRadius(10)
 
+            Text("Ask the senior to open Settings and find their username so you can link your accounts.")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
             if !statusMessage.isEmpty {
                 Text(statusMessage)
                     .foregroundColor(.gray)
@@ -228,6 +281,7 @@ struct MissedRemindersView: View {
     @State private var selectedSeniorFilter: String = "All"
     @State private var showMissedOnly: Bool = true
     @State private var availableSeniors: [String] = ["All"]
+    @State private var selectedReminder: MissedReminder?
     @AppStorage("clearedMissedReminders") private var clearedRemindersData: String = ""
 
     private func getClearedSet() -> Set<String> {
@@ -245,33 +299,60 @@ struct MissedRemindersView: View {
         missedReminders.removeAll { $0.id == reminder.id }
     }
 
+    private func clearAllReminders() {
+        var set = getClearedSet()
+        for reminder in missedReminders {
+            set.insert(reminder.id)
+        }
+        saveClearedSet(set)
+        missedReminders.removeAll()
+    }
+
     var body: some View {
         VStack {
             HStack {
-                Spacer()
+                ZStack {
+                    HStack {
+                        Spacer()
+                        Menu {
+                            ForEach(availableSeniors, id: \.self) { senior in
+                                Button(senior) {
+                                    selectedSeniorFilter = senior
+                                    loadMissedReminders()
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Text("Senior: \(selectedSeniorFilter)")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                                Image(systemName: "chevron.down")
+                                    .font(.subheadline)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(Color.blue.opacity(0.15))
+                            .cornerRadius(12)
+                        }
+                        Spacer()
+                    }
 
-                Menu {
-                    ForEach(availableSeniors, id: \.self) { senior in
-                        Button(senior) {
-                            selectedSeniorFilter = senior
-                            loadMissedReminders()
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            clearAllReminders()
+                        }) {
+                            Text("Clear All")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.15))
+                                .foregroundColor(.red)
+                                .cornerRadius(10)
                         }
                     }
-                } label: {
-                    HStack {
-                        Text("Senior: \(selectedSeniorFilter)")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                        Image(systemName: "chevron.down")
-                            .font(.subheadline)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.blue.opacity(0.15))
-                    .cornerRadius(12)
                 }
-
-                Spacer()
             }
             .padding(.horizontal)
 
@@ -299,6 +380,10 @@ struct MissedRemindersView: View {
                                 .foregroundColor(.secondary)
                         }
                         .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedReminder = reminder
+                        }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
                                 clearReminder(reminder)
@@ -321,6 +406,13 @@ struct MissedRemindersView: View {
             }
             .onAppear {
                 loadMissedReminders()
+            }
+            .alert(item: $selectedReminder) { reminder in
+                Alert(
+                    title: Text(reminder.title),
+                    message: Text(reminder.description.isEmpty ? "No description." : reminder.description),
+                    dismissButton: .default(Text("OK"))
+                )
             }
 
             Spacer(minLength: 8)
@@ -405,6 +497,7 @@ struct MissedRemindersView: View {
                                         let reminderItem = MissedReminder(
                                             id: id,
                                             title: reminder.title,
+                                            description: reminder.description,
                                             seniorName: nameMap[uid] ?? "Unknown",
                                             date: scheduledDate,
                                             dateString: formatDate(scheduledDate),
@@ -423,6 +516,7 @@ struct MissedRemindersView: View {
                                         let reminderItem = MissedReminder(
                                             id: id,
                                             title: reminder.title,
+                                            description: reminder.description,
                                             seniorName: nameMap[uid] ?? "Unknown",
                                             date: scheduledDate,
                                             dateString: formatDate(scheduledDate),
@@ -462,6 +556,7 @@ struct MissedRemindersView: View {
 struct MissedReminder: Identifiable {
     let id: String   // stable ID
     let title: String
+    let description: String
     let seniorName: String
     let date: Date
     let dateString: String

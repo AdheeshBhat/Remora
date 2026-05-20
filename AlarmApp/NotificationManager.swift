@@ -8,10 +8,19 @@
 import UserNotifications
 import Foundation
 import FirebaseFirestore
+import FirebaseAuth
+import Combine
+
+struct ReminderDetailPresentation: Identifiable {
+    let id = UUID()
+    let title: String
+    let description: String
+}
 
 class NotificationManager: ObservableObject {
     static let shared = NotificationManager()
     private let maxScheduledNotifications = 30 // iOS limit is 64
+    @Published var openedReminderDetail: ReminderDetailPresentation?
     
     private init() {}
     
@@ -22,7 +31,9 @@ class NotificationManager: ObservableObject {
         reminder: ReminderData,
         reminderID: String,
         isCaretakerNotification: Bool = false,
-        seniorName: String? = nil
+        seniorName: String? = nil,
+        seniorId: String? = nil,
+        caretakerId: String? = nil
     ) {
         
         // Schedule initial batch for forever repeating alarms
@@ -31,7 +42,9 @@ class NotificationManager: ObservableObject {
             reminderID: reminderID,
             startDate: reminder.date,
             isCaretakerNotification: isCaretakerNotification,
-            seniorName: seniorName
+            seniorName: seniorName,
+            seniorId: seniorId,
+            caretakerId: caretakerId
         )
     }
     
@@ -49,10 +62,14 @@ class NotificationManager: ObservableObject {
         reminderID: String,
         startDate: Date,
         isCaretakerNotification: Bool,
-        seniorName: String? = nil
+        seniorName: String? = nil,
+        seniorId: String? = nil,
+        caretakerId: String? = nil
     ) {
         // Create a new UNNotificationContent object to hold the notification data
         let content = UNMutableNotificationContent()
+        let resolvedSeniorId = seniorId ?? (isCaretakerNotification ? "" : Auth.auth().currentUser?.uid ?? "")
+        let resolvedCaretakerId = caretakerId ?? (isCaretakerNotification ? Auth.auth().currentUser?.uid : nil)
         
         //Different content depending on whether it's a caretaker notification
         if isCaretakerNotification {
@@ -63,7 +80,10 @@ class NotificationManager: ObservableObject {
                 "role": "caretaker",
                 "reminderID": reminderID,
                 "seniorName": senior,
-                "reminderTitle": reminder.title
+                "reminderTitle": reminder.title,
+                "reminderDescription": reminder.description,
+                "seniorId": resolvedSeniorId,
+                "caretakerId": resolvedCaretakerId ?? ""
             ]
         } else {
             //Regular notification for the senior
@@ -71,7 +91,11 @@ class NotificationManager: ObservableObject {
             content.body = reminder.description
             content.userInfo = [
                 "role": "senior",
-                "reminderID": reminderID
+                "reminderID": reminderID,
+                "reminderTitle": reminder.title,
+                "reminderDescription": reminder.description,
+                "seniorId": resolvedSeniorId,
+                "caretakerId": resolvedCaretakerId ?? ""
             ]
         }
 
@@ -146,7 +170,11 @@ class NotificationManager: ObservableObject {
                         "isLastInBatch": true,
                         "reminderID": reminderID,
                         "nextStartDate": currentDate.timeIntervalSince1970,
-                        "role": role
+                        "role": role,
+                        "reminderTitle": reminder.title,
+                        "reminderDescription": reminder.description,
+                        "seniorId": resolvedSeniorId,
+                        "caretakerId": resolvedCaretakerId ?? ""
                     ]
                     if let seniorName = seniorName, isCaretakerNotification {
                         lastBatchUserInfo["seniorName"] = seniorName            // Include senior's name for caretaker notifications
@@ -178,7 +206,11 @@ class NotificationManager: ObservableObject {
                     followUpContent.userInfo = [
                         "isFollowUp": true,
                         "reminderID": reminderID,
-                        "role": "senior"
+                        "role": "senior",
+                        "reminderTitle": reminder.title,
+                        "reminderDescription": reminder.description,
+                        "seniorId": resolvedSeniorId,
+                        "caretakerId": resolvedCaretakerId ?? ""
                     ]
 
                     // Schedule follow-up only if the time is in the future
@@ -225,6 +257,30 @@ class NotificationManager: ObservableObject {
     
     func handleNotificationResponse(response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
+        let reminderTitle = userInfo["reminderTitle"] as? String ?? response.notification.request.content.title
+        let reminderDescription = userInfo["reminderDescription"] as? String ?? response.notification.request.content.body
+
+        if let reminderID = userInfo["reminderID"] as? String {
+            FirestoreManager().getReminder(dateCreated: reminderID) { document in
+                let data = document?.data()
+                let currentTitle = data?["title"] as? String ?? reminderTitle
+                let currentDescription = data?["description"] as? String ?? reminderDescription
+
+                DispatchQueue.main.async {
+                    self.openedReminderDetail = ReminderDetailPresentation(
+                        title: currentTitle,
+                        description: currentDescription
+                    )
+                }
+            }
+        } else {
+            DispatchQueue.main.async {
+                self.openedReminderDetail = ReminderDetailPresentation(
+                    title: reminderTitle,
+                    description: reminderDescription
+                )
+            }
+        }
         
         if let isLastInBatch = userInfo["isLastInBatch"] as? Bool, isLastInBatch,
            let reminderID = userInfo["reminderID"] as? String,
@@ -360,7 +416,8 @@ class NotificationManager: ObservableObject {
                     reminder: reminder,
                     reminderID: reminderID,
                     startDate: nextDate,
-                    isCaretakerNotification: false
+                    isCaretakerNotification: false,
+                    seniorId: Auth.auth().currentUser?.uid
                 )
             }
         }

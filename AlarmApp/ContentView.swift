@@ -22,6 +22,7 @@ struct ContentView: View {
         presentationMode: Binding<PresentationMode>
     @State public var cur_screen: Screen = .HomeScreen
     @State private var isCaretaker: Bool = false
+    @ObservedObject private var notificationManager = NotificationManager.shared
     
     let firestoreManager = FirestoreManager()
     
@@ -43,6 +44,13 @@ struct ContentView: View {
             requestNotificationPermission()
             checkUserStatus()
             //viewModel.addTestReminder()
+        }
+        .alert(item: $notificationManager.openedReminderDetail) { detail in
+            Alert(
+                title: Text(detail.title),
+                message: Text(detail.description.isEmpty ? "No description." : detail.description),
+                dismissButton: .default(Text("OK"))
+            )
         }
     } //Body ending
     

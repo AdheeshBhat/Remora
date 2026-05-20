@@ -381,14 +381,15 @@ struct RemindersScreen: View {
     }
 
     private var calendarView: some View {
-        CalendarView(cur_screen: $cur_screen, initialViewType: $calendarViewType, preloadedReminders: remindersForUser, firestoreManager: firestoreManager)
-            .onDisappear {
-                if calendarViewType == "week" {
-                    filterPeriod = "week"
-                } else if calendarViewType == "month" {
-                    filterPeriod = "month"
-                }
-            }
+        CalendarView(
+            cur_screen: $cur_screen,
+            initialViewType: $calendarViewType,
+            firestoreManager: firestoreManager
+        )
+        .onDisappear {
+            // When dismissing calendar, refresh list
+            loadReminders()
+        }
     }
     
     // Applies swipeOffset to the correct date variable
@@ -503,8 +504,7 @@ struct ReminderRow: View {
     var title: String
     var time: String
     var reminderDate: String
-    // Remove local copy of reminder
-    @State var reminder: ReminderData
+    var reminder: ReminderData
     var showEditButton: Bool = false
     var showDeleteButton: Bool = false
     //Used to show "mark as incomplete" alert
@@ -513,6 +513,7 @@ struct ReminderRow: View {
     @State private var showDeleteConfirmation = false
     // Used for two-stage delete alert (instance or all)
     @State private var showDeleteInstanceChoice = false
+    @State private var showReminderDetails = false
     var userID: Int
     var dateKey: Date
     var documentID: String
@@ -759,7 +760,16 @@ struct ReminderRow: View {
             }
         } // HStack ending
         .padding()
+        .contentShape(Rectangle())
         .background(RoundedRectangle(cornerRadius: 12).stroke(Color.primary, lineWidth: 1))
+        .onTapGesture {
+            showReminderDetails = true
+        }
+        .alert(title, isPresented: $showReminderDetails) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(reminder.description.isEmpty ? "No description." : reminder.description)
+        }
         .onAppear {
             firestoreManager.getReminder(
                 dateCreated: documentID
@@ -768,85 +778,6 @@ struct ReminderRow: View {
             }
         }
     }
-//    func rescheduleNotification(repeats: Bool) {
-//        // Update (reset) the notification when marked as incomplete
-//        firestoreManager.getReminder(dateCreated: documentID) { document in
-//            guard let data = document?.data() else { return }
-//
-//            if let timestamp = data["date"] as? Timestamp {
-//                let date = timestamp.dateValue()
-//                let title = data["title"] as? String ?? ""
-//                let description = data["description"] as? String ?? ""
-//
-//                let repeatSettings = data["repeatSettings"] as? [String: Any]
-//                let repeatType = repeatSettings?["repeat_type"] as? String ?? "None"
-//                let repeatUntil = repeatSettings?["repeat_until_date"] as? String ?? "Forever"
-//                let caretakerAlertDelay = data["caretakerAlertDelay"] as? TimeInterval ?? 1800
-//
-//                var customRepeat: CustomRepeatType? = nil
-//                if let repeatIntervals = repeatSettings?["repeatIntervals"] as? [String: Any],
-//                   let days = repeatIntervals["days"] as? String {
-//                    customRepeat = CustomRepeatType(days: days)
-//                }
-//
-//                firestoreManager.loadUserSettings(field: "selectedSound") {soundValue in
-//                    let soundType = (soundValue as? String) ?? "Chord"
-//                    let activeUID = firestoreManager.activeUserUID
-//
-//                    firestoreManager.checkIfCaretaker { isCaretaker in
-//                        if isCaretaker {
-//                            // Caretaker rescheduling senior reminder
-//                            firestoreManager.getLinkedSeniorUIDs { seniorUIDs in
-//                                //for seniorUID in seniorUIDs {
-//                                    firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
-//                                        guard let seniorName = seniorName else { return }
-//                                        setAlarm(
-//                                            dateAndTime: date,
-//                                            title: title,
-//                                            description: description,
-//                                            repeat_type: repeatType,
-//                                            repeat_until_date: repeatUntil,
-//                                            repeatIntervals: customRepeat,
-//                                            reminderID: documentID,
-//                                            soundType: soundType,
-//                                            caretakerAlertDelay: caretakerAlertDelay,
-//                                            isCaretakerNotification: true,
-//                                            seniorName: seniorName
-//                                        )
-//                                    }
-//                                //}
-//                            }
-//                        } else {
-//                            // Senior rescheduling reminder
-//                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-//                                //let targets = [activeUID] + caretakerUIDs
-//                                //for _ in targets {
-//                                    firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
-//                                        guard let seniorName = seniorName else { return }
-//                                        setAlarm(
-//                                            dateAndTime: date,
-//                                            title: title,
-//                                            description: description,
-//                                            repeat_type: repeatType,
-//                                            repeat_until_date: repeatUntil,
-//                                            repeatIntervals: customRepeat,
-//                                            reminderID: documentID,
-//                                            soundType: soundType,
-//                                            caretakerAlertDelay: caretakerAlertDelay,
-//                                            isCaretakerNotification: false,
-//                                            seniorName: seniorName
-//                                        )
-//                                    }
-//                                //}
-//                            }
-//                        }
-//                    }
-//                }
-//
-//                print("Reminder has been marked as incomplete and alarm rescheduled for \(date)")
-//            }
-//        }
-//    }
     
 
 // Helper struct to mimic DocumentSnapshot for local UI change

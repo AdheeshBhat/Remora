@@ -10,11 +10,13 @@ import SwiftUI
 struct NavigationBarExperience: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appearance: AppearanceModel
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     
     @Binding var cur_screen: Screen
     @ObservedObject var firestoreManager: FirestoreManager
     @StateObject private var keyboard = KeyboardObserver()
     @State private var initialCalendarViewType: String = "month"
+    @State private var previousScreen: Screen? = nil
     
     var body: some View {
         VStack {
@@ -119,6 +121,11 @@ struct NavigationBarExperience: View {
                         // NORMAL BACK BUTTON
                         Button(action: {
                             if cur_screen != .HomeScreen {
+                                // If we're navigating back to the calendar, force it to refresh
+                                if previousScreen == .CalendarScreen {
+                                    preloadedReminders.preloadedReminders = nil
+                                    NotificationCenter.default.post(name: FirestoreManager.remindersChangedNotification, object: nil)
+                                }
                                 dismiss()
                             }
                         }) {
@@ -138,5 +145,9 @@ struct NavigationBarExperience: View {
             } //HStack ending
             .padding(.bottom, 2)
         } //VStack ending
+        .onChange(of: cur_screen) { oldValue, newValue in
+            previousScreen = oldValue
+        }
     } //body ending
 }
+

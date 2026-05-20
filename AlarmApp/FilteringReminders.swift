@@ -7,6 +7,26 @@
 
 import SwiftUI
 
+// Returns a date for the given year/month using preferredDay if possible,
+// otherwise the month's last valid day. Preserves hour/minute.
+private func clampedDate(year: Int, month: Int, preferredDay: Int, hour: Int, minute: Int) -> Date? {
+    let calendar = Calendar.current
+    // Start of the month
+    guard let monthStart = calendar.date(from: DateComponents(year: year, month: month, day: 1)) else { return nil }
+    // Number of days in month
+    guard let range = calendar.range(of: .day, in: .month, for: monthStart) else { return nil }
+    let lastDay = range.count
+    let day = min(max(preferredDay, 1), lastDay)
+    var comps = DateComponents()
+    comps.year = year
+    comps.month = month
+    comps.day = day
+    comps.hour = hour
+    comps.minute = minute
+    comps.second = 0
+    return calendar.date(from: comps)
+}
+
 // ↓ REMINDER FILTERS ↓
 
 func filterRemindersForToday(userData: [Date: ReminderData], filteredDay: Date?, hideCompleted: Bool) -> [Date: ReminderData] {
@@ -214,42 +234,24 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 var seenDates = Set<String>()
                 var currentMonthDate = calendar.date(from: calendar.dateComponents([.year, .month], from: reminder.date))!
                 
+                let hour = calendar.component(.hour, from: reminder.date)
+                let minute = calendar.component(.minute, from: reminder.date)
                 while currentMonthDate <= endDate && seenDates.count < 50 {
                     let year = calendar.component(.year, from: currentMonthDate)
                     let month = calendar.component(.month, from: currentMonthDate)
                     
                     for day in dayNumbers {
-                        var components = DateComponents()
-                        components.year = year
-                        components.month = month
-                        components.day = day
-                        
-                        if let occurrenceDate = calendar.date(from: components) {
-                            let finalDate = calendar.date(
-                                bySettingHour: calendar.component(.hour, from: reminder.date),
-                                minute: calendar.component(.minute, from: reminder.date),
-                                second: 0,
-                                of: occurrenceDate
-                            )!
-                            
+                        if let occurrenceDate = clampedDate(year: year, month: month, preferredDay: day, hour: hour, minute: minute) {
+                            let finalDate = occurrenceDate
                             let dateKey = createUniqueIDFromDate(date: finalDate)
-                            
                             if finalDate >= startDate && finalDate <= endDate &&
                                 !seenDates.contains(dateKey) &&
-                                (!hideCompleted || !reminder.completedInstances.contains(where: {
-                                    Calendar.current.isDate($0, inSameDayAs: finalDate)
-                                })) &&
-                                !reminder.deletedInstances.contains(where: {
-                                    Calendar.current.isDate($0, inSameDayAs: finalDate)
-                                }) {
-                                
+                                (!hideCompleted || !reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate) })) &&
+                                !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate) }) {
                                 seenDates.insert(dateKey)
                                 var instanceReminder = reminder
                                 instanceReminder.date = finalDate
-                                instanceReminder.isComplete = reminder.completedInstances.contains(where: {
-                                    Calendar.current.isDate($0, inSameDayAs: finalDate)
-                                })
-                                
+                                instanceReminder.isComplete = reminder.completedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate) })
                                 expandedData["\(documentID)-\(dateKey)"] = instanceReminder
                             }
                         }
@@ -285,7 +287,19 @@ func expandRepeatingReminders(userData: [String: ReminderData], period: String, 
                 case "Weekly":
                     nextDate = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate)
                 case "Monthly":
-                    nextDate = calendar.date(byAdding: .month, value: 1, to: currentDate)
+                    // Preserve the intended day-of-month; clamp to last valid day
+                    let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: currentDate)
+                    let nextMonthBase = calendar.date(byAdding: .month, value: 1, to: calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: 1))!)
+                    if let nextMonthBase = nextMonthBase,
+                       let next = clampedDate(year: calendar.component(.year, from: nextMonthBase),
+                                              month: calendar.component(.month, from: nextMonthBase),
+                                              preferredDay: comps.day ?? 1,
+                                              hour: comps.hour ?? 0,
+                                              minute: comps.minute ?? 0) {
+                        nextDate = next
+                    } else {
+                        nextDate = calendar.date(byAdding: .month, value: 1, to: currentDate)
+                    }
                 case "Yearly":
                     nextDate = calendar.date(byAdding: .year, value: 1, to: currentDate)
                 default:
@@ -346,36 +360,22 @@ func expandRepeatingRemindersForCalendar(userData: [String: ReminderData], start
                 var seenDates = Set<String>()
                 var currentMonthDate = calendar.date(from: calendar.dateComponents([.year, .month], from: reminder.date))!
                 
+                let hour = calendar.component(.hour, from: reminder.date)
+                let minute = calendar.component(.minute, from: reminder.date)
                 while currentMonthDate <= endDate && seenDates.count < 200 {
                     let year = calendar.component(.year, from: currentMonthDate)
                     let month = calendar.component(.month, from: currentMonthDate)
                     
                     for day in dayNumbers {
-                        var components = DateComponents()
-                        components.year = year
-                        components.month = month
-                        components.day = day
-                        
-                        if let occurrenceDate = calendar.date(from: components) {
-                            let finalDate = calendar.date(
-                                bySettingHour: calendar.component(.hour, from: reminder.date),
-                                minute: calendar.component(.minute, from: reminder.date),
-                                second: 0,
-                                of: occurrenceDate
-                            )!
-                            
+                        if let occurrenceDate = clampedDate(year: year, month: month, preferredDay: day, hour: hour, minute: minute) {
+                            let finalDate = occurrenceDate
                             let dateKey = createUniqueIDFromDate(date: finalDate)
-                            
                             if finalDate >= startDate && finalDate <= endDate &&
                                 !seenDates.contains(dateKey) &&
-                                !reminder.deletedInstances.contains(where: {
-                                    Calendar.current.isDate($0, inSameDayAs: finalDate)
-                                }) {
-                                
+                                !reminder.deletedInstances.contains(where: { Calendar.current.isDate($0, inSameDayAs: finalDate) }) {
                                 seenDates.insert(dateKey)
                                 var instanceReminder = reminder
                                 instanceReminder.date = finalDate
-                                
                                 expandedData["\(documentID)-\(dateKey)"] = instanceReminder
                             }
                         }
@@ -405,7 +405,19 @@ func expandRepeatingRemindersForCalendar(userData: [String: ReminderData], start
                 case "Weekly":
                     nextDate = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate)
                 case "Monthly":
-                    nextDate = calendar.date(byAdding: .month, value: 1, to: currentDate)
+                    // Preserve the intended day-of-month; clamp to last valid day
+                    let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: currentDate)
+                    let nextMonthBase = calendar.date(byAdding: .month, value: 1, to: calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: 1))!)
+                    if let nextMonthBase = nextMonthBase,
+                       let next = clampedDate(year: calendar.component(.year, from: nextMonthBase),
+                                              month: calendar.component(.month, from: nextMonthBase),
+                                              preferredDay: comps.day ?? 1,
+                                              hour: comps.hour ?? 0,
+                                              minute: comps.minute ?? 0) {
+                        nextDate = next
+                    } else {
+                        nextDate = calendar.date(byAdding: .month, value: 1, to: currentDate)
+                    }
                 case "Yearly":
                     nextDate = calendar.date(byAdding: .year, value: 1, to: currentDate)
                 default:
@@ -478,3 +490,4 @@ func calculatePatternDateForMonth(pattern: String, month: Date) -> Date? {
     }
     return nil
 }
+
