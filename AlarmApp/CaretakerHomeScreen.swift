@@ -5,12 +5,23 @@
 //  Created by Adheesh Bhat on 10/14/25.
 //
 
+
 import SwiftUI
+
+struct LinkedSeniorSummary: Identifiable, Hashable {
+    let uid: String
+    let displayName: String
+    let username: String
+    let isFakeSenior: Bool
+
+    var id: String { uid }
+}
 
 struct CaretakerHomeView: View {
     @Binding var cur_screen: Screen
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     let firestoreManager: FirestoreManager
-    @State private var seniors: [String] = []
+    @State private var seniors: [LinkedSeniorSummary] = []
     @State private var showingAddSenior = false
     @State private var selectedSeniorUID: String? = nil
     @State private var displayedName: String = ""
@@ -60,11 +71,7 @@ struct CaretakerHomeView: View {
                     AddSeniorView(
                         firestoreManager: firestoreManager,
                         onSuccess: {
-                            firestoreManager.fetchLinkedSeniors { names in
-                                DispatchQueue.main.async {
-                                    self.seniors = names
-                                }
-                            }
+                            loadLinkedSeniors()
                         }
                     )
                 }
@@ -84,33 +91,48 @@ struct CaretakerHomeView: View {
                     .padding()
             } else {
                 List {
-                    ForEach(seniors, id: \.self) { senior in
+                    ForEach(seniors) { senior in
                         Button(action: {
-                            firestoreManager.getUIDFromUsername(username: senior) { uid in
-                                guard let uid = uid, !uid.isEmpty else { return }
-                                firestoreManager.currentUID = uid
-                                DispatchQueue.main.async {
-                                    firestoreManager.isCaretakerViewingSenior = true
-                                    selectedSeniorUID = uid
-                                    displayedName = senior
-                                }
+                            firestoreManager.currentUID = senior.uid
+                            DispatchQueue.main.async {
+                                firestoreManager.isCaretakerViewingSenior = true
+                                selectedSeniorUID = senior.uid
+                                displayedName = senior.displayName
                             }
                         }) {
                             HStack {
-                                Text(senior)
-                                    .font(.headline)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(senior.displayName)
+                                        .font(.headline)
+
+                                    if senior.isFakeSenior {
+                                        Text("Caretaker-created profile")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("@\(senior.username)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+
                                 Spacer()
+
                                 Menu {
                                     Button(role: .destructive) {
-                                        firestoreManager.unlinkSenior(username: senior) { error in
-                                            if let error = error {
-                                                print("Error unlinking senior: \(error.localizedDescription)")
-                                            } else {
-                                                firestoreManager.fetchLinkedSeniors { names in
-                                                    DispatchQueue.main.async {
-                                                        self.seniors = names
-                                                    }
+                                        let seniorToUnlink = senior
+
+                                        // Optimistically remove the senior from the UI immediately.
+                                        seniors.removeAll { $0.uid == seniorToUnlink.uid }
+
+                                        firestoreManager.unlinkSenior(username: seniorToUnlink.username) { error in
+                                            DispatchQueue.main.async {
+                                                if let error = error {
+                                                    print("Error unlinking senior: \(error.localizedDescription)")
                                                 }
+
+                                                // Refresh either way so the screen matches Firebase after the operation finishes.
+                                                loadLinkedSeniors()
                                             }
                                         }
                                     } label: {
@@ -133,11 +155,7 @@ struct CaretakerHomeView: View {
         .navigationBarBackButtonHidden(true)
         .onAppear {
             cur_screen = .CaretakerHomeScreen
-            firestoreManager.fetchLinkedSeniors { names in
-                DispatchQueue.main.async {
-                    self.seniors = names
-                }
-            }
+            loadLinkedSeniors()
             firestoreManager.getLinkedSeniorUIDs { seniorUIDs in
                 firestoreManager.getRemindersForMultipleUsers(uids: seniorUIDs) { results in
                     
@@ -200,6 +218,20 @@ struct CaretakerHomeView: View {
             .hidden()
         )
     }
+    private func loadLinkedSeniors() {
+        firestoreManager.fetchLinkedSeniorSummaries { summaries in
+            DispatchQueue.main.async {
+                self.seniors = summaries.map {
+                    LinkedSeniorSummary(
+                        uid: $0.uid,
+                        displayName: $0.displayName,
+                        username: $0.username,
+                        isFakeSenior: $0.isFakeSenior
+                    )
+                }
+            }
+        }
+    }
 }
 
 
@@ -208,44 +240,89 @@ struct AddSeniorView: View {
     let firestoreManager: FirestoreManager
     var onSuccess: (() -> Void)?
     @State private var username: String = ""
+    @State private var fakeSeniorName: String = ""
     @State private var statusMessage: String = ""
+    @State private var isCreatingProfile: Bool = false
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Add Senior")
-                .font(.title)
-                .fontWeight(.bold)
+        ScrollView {
+            VStack(spacing: 24) {
+                Text("Add Senior")
+                    .font(.title)
+                    .fontWeight(.bold)
 
-            TextField("Enter Senior's Username", text: $username)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Link a Senior With an Account")
+                        .font(.headline)
+
+                    TextField("Enter Senior's Username", text: $username)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                        .autocapitalization(.none)
+
+                    Button("Link Senior") {
+                        addSenior()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+
+                    Text("Ask the senior to open Settings and find their username so you can link your accounts.")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                }
                 .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
-                .autocapitalization(.none)
+                .background(Color.blue.opacity(0.08))
+                .cornerRadius(14)
 
-            Button("Link Senior") {
-                addSenior()
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Create a Senior Profile")
+                        .font(.headline)
+
+                    Text("Use this if the senior does not have a phone or cannot create an account. You will manage their reminders, and only you will receive notifications.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    TextField("Senior's Name", text: $fakeSeniorName)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                        .textContentType(.name)
+
+                    Button(action: {
+                        createSeniorProfile()
+                    }) {
+                        if isCreatingProfile {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            Text("Create Profile")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .padding()
+                    .background(Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .disabled(isCreatingProfile)
+                }
+                .padding()
+                .background(Color.green.opacity(0.08))
+                .cornerRadius(14)
+
+                if !statusMessage.isEmpty {
+                    Text(statusMessage)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
             }
             .padding()
-            .frame(maxWidth: .infinity)
-            .background(Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(10)
-
-            Text("Ask the senior to open Settings and find their username so you can link your accounts.")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            if !statusMessage.isEmpty {
-                Text(statusMessage)
-                    .foregroundColor(.gray)
-                    .padding()
-            }
-
-            Spacer()
         }
-        .padding()
     }
 
     private func addSenior() {
@@ -259,11 +336,36 @@ struct AddSeniorView: View {
                 if let error = error {
                     statusMessage = "Error linking senior: \(error.localizedDescription)"
                 } else {
-                    statusMessage = "Successfully linked senior!"
+                    DispatchQueue.main.async {
+                        statusMessage = "Successfully linked senior!"
+                        onSuccess?()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func createSeniorProfile() {
+        isCreatingProfile = true
+        statusMessage = ""
+
+        firestoreManager.createFakeSeniorProfile(name: fakeSeniorName) { result in
+            DispatchQueue.main.async {
+                isCreatingProfile = false
+
+                switch result {
+                case .success:
+                    statusMessage = "Senior profile created!"
                     onSuccess?()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                         dismiss()
                     }
+
+                case .failure(let error):
+                    statusMessage = "Error creating profile: \(error.localizedDescription)"
                 }
             }
         }

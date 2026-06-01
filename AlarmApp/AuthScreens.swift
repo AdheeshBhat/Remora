@@ -186,7 +186,7 @@ struct RegistrationScreen: View {
     @State private var username: String = ""
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
-    @State private var isCaretaker: Bool = false
+    @State private var isCaretaker: Bool? = nil
     @State private var errorMessage: String = ""
     @State private var navigateToHome: Bool = false
     @State private var navigateToCaretakerHome: Bool = false
@@ -237,8 +237,14 @@ struct RegistrationScreen: View {
                     .cornerRadius(8)
                     .textContentType(.password)
 
-                Toggle("Caretaker", isOn: $isCaretaker)
-                    .padding()
+                Toggle(
+                    "Caretaker",
+                    isOn: Binding(
+                        get: { isCaretaker ?? false },
+                        set: { isCaretaker = $0 }
+                    )
+                )
+                .padding()
 
                 PrivacyConsentCheckbox(isChecked: $hasConsented)
                     .padding(.horizontal)
@@ -325,7 +331,7 @@ struct RegistrationScreen: View {
                                 
                                 // Navigate to appropriate HomeScreen
                                 cur_screen = .HomeScreen
-                                if isCaretaker {
+                                if isCaretaker == true {
                                     navigateToCaretakerHome = true
                                 } else {
                                     navigateToHome = true

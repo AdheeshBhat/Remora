@@ -38,7 +38,7 @@ struct SettingsScreen: View {
     @State var selectedSound: String = ""
     @State private var showLogoutAlert = false
     @State private var showDeleteAccountAlert = false
-    @State private var isCaretaker = false
+    @State private var isCaretaker: Bool? = nil
     @State private var useLightMode: Bool = true
     @State private var username: String = ""
     @State private var tempUseLightMode: Bool = true
@@ -96,7 +96,6 @@ struct SettingsScreen: View {
                 .padding(.bottom)
             saveSettingsButton
                 .padding(.bottom)
-            navBar
         }
         .onAppear {
             cur_screen = .SettingsScreen
@@ -389,13 +388,6 @@ extension SettingsScreen {
         .padding(.horizontal)
     }
     
-    private var navBar: some View {
-        Group {
-            if !isCaretaker {
-                NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
-            }
-        }
-    }
     
     private func logout() {
         do {

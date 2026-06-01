@@ -10,6 +10,7 @@ import FirebaseAuth
 
 struct CreateReminderScreen: View {
     @Environment(\.presentationMode) private var presentationMode
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @Binding var cur_screen: Screen
     @State private var title: String = ""
     @State private var description: String = ""
@@ -232,50 +233,66 @@ struct CreateReminderScreen: View {
 
                     //SAVE BUTTON
                     Button(action: {
-                        if title.isEmpty {
+                        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             showReminderNameAlert = true
-                        } else {
-                            let reminderID = getExactStringFromCurrentDate()
-                            let activeUID = firestoreManager.activeUserUID
-                            let creatorUID = Auth.auth().currentUser?.uid ?? ""
-                            
-                            firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
-                                guard let seniorName = seniorName else { return }
-                                
-                                firestoreManager.getUserFirstName(forUID: creatorUID) { creatorName in
-                                    guard let creatorName = creatorName else { return }
-                                
-                                    let customRepeatType = customPatterns.isEmpty ? nil : CustomRepeatType(days: customPatterns.joined(separator: ","))
-                                    let reminder = ReminderData(
-                                        ID: Int.random(in: 1000...9999),
-                                        date: date,
-                                        title: title,
-                                        description: description,
-                                        repeatSettings: RepeatSettings(repeat_type: repeat_setting, repeat_until_date: repeatUntil, repeatIntervals: customRepeatType),
-                                        priority: priority,
-                                        isComplete: false,
-                                        author: seniorName,
-                                        creator: creatorName,
-                                        isLocked: isLocked,
-                                        caretakerAlertDelay: caretakerAlertDelay
-                                    )
-                                    
-                                    
-                                    firestoreManager.checkIfCaretaker { isCaretaker in
-                                        if isCaretaker {
-                                            // Caretaker: save to senior and self
-                                            firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [activeUID])
-                                            firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [Auth.auth().currentUser?.uid ?? ""])
-                                        } else {
-                                            // Senior: save to self
-                                            firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [activeUID])
-                                            // Save to all linked caretakers
-                                            firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-                                                for caretakerUID in caretakerUIDs {
-                                                    firestoreManager.setReminder(reminderID: reminderID, reminder: reminder, forUIDs: [caretakerUID])
-                                                }
-                                            }
+                            return
+                        }
+
+                        let reminderID = getExactStringFromCurrentDate()
+                        let activeUID = firestoreManager.activeUserUID
+                        let creatorUID = Auth.auth().currentUser?.uid ?? ""
+
+                        guard !activeUID.isEmpty else {
+                            print("Cannot save reminder: active user UID is empty")
+                            return
+                        }
+
+                        firestoreManager.getUserFirstName(forUID: activeUID) { seniorName in
+                            let resolvedSeniorName = seniorName ?? "Senior"
+
+                            firestoreManager.getUserFirstName(forUID: creatorUID) { creatorName in
+                                let resolvedCreatorName = creatorName ?? "Caretaker"
+                                let customRepeatType = customPatterns.isEmpty ? nil : CustomRepeatType(days: customPatterns.joined(separator: ","))
+                                let reminder = ReminderData(
+                                    ID: Int.random(in: 1000...9999),
+                                    date: date,
+                                    title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    description: description,
+                                    repeatSettings: RepeatSettings(
+                                        repeat_type: repeat_setting,
+                                        repeat_until_date: repeatUntil,
+                                        repeatIntervals: customRepeatType
+                                    ),
+                                    priority: priority,
+                                    isComplete: false,
+                                    author: resolvedSeniorName,
+                                    creator: resolvedCreatorName,
+                                    isLocked: isLocked,
+                                    caretakerAlertDelay: caretakerAlertDelay
+                                )
+
+                                firestoreManager.checkIfCaretaker { isCaretaker in
+                                    if isCaretaker {
+                                        // Caretaker-created reminders are saved to the viewed senior profile.
+                                        // For fake senior profiles, this senior document triggers caretaker notifications.
+                                        let targetUIDs = [activeUID, creatorUID].filter { !$0.isEmpty }
+                                        firestoreManager.setReminder(
+                                            reminderID: reminderID,
+                                            reminder: reminder,
+                                            forUIDs: Array(Set(targetUIDs))
+                                        )
+                                    } else {
+                                        firestoreManager.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
+                                            let targetUIDs = ([activeUID] + caretakerUIDs).filter { !$0.isEmpty }
+                                            firestoreManager.setReminder(
+                                                reminderID: reminderID,
+                                                reminder: reminder,
+                                                forUIDs: Array(Set(targetUIDs))
+                                            )
                                         }
+                                    }
+
+                                    DispatchQueue.main.async {
                                         presentationMode.wrappedValue.dismiss()
                                     }
                                 }
@@ -297,7 +314,7 @@ struct CreateReminderScreen: View {
                 .padding(.bottom, 20)
             }
             
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
         .background(Color(.systemBackground))
         .alert("Please type the reminder name first.", isPresented: $showReminderNameAlert) {

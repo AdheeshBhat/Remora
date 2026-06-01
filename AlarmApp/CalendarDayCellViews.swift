@@ -93,6 +93,7 @@ struct MonthDayCellView: View {
                             remindersForUser: [:],
                             firestoreManager: firestoreManager
                         )
+                        
                     ) {
                         Text("+\(reminders.count - 3)")
                             .font(.system(size: 6))

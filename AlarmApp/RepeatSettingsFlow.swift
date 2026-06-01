@@ -9,6 +9,7 @@ import SwiftUI
 
 struct RepeatSettingsFlow: View {
     @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @Binding var cur_screen: Screen
     @State var title: String
     @Binding var repeatSetting: String
@@ -182,7 +183,7 @@ struct RepeatSettingsFlow: View {
             }
             
             VStack {
-                NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
             }
         }
     }

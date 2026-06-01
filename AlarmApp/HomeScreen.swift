@@ -12,6 +12,7 @@ struct HomeView: View {
     @AppStorage("hideCompletedReminders") var isHideCompletedReminders: Bool = false
     let firestoreManager: FirestoreManager
     @Environment(\.presentationMode) private var presentationMode
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
 
     var body: some View {
         VStack {
@@ -24,6 +25,7 @@ struct HomeView: View {
                             cur_screen: $cur_screen,
                             firestoreManager: firestoreManager
                         )
+                        .environmentObject(preloadedReminders)
                     ) {
                         HStack {
                             Image(systemName: "arrow.left")
@@ -84,7 +86,7 @@ struct HomeView: View {
 
             Spacer()
 
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
         
         .onAppear {

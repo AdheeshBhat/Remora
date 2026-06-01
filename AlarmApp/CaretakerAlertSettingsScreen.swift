@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct CaretakerAlertSettingsScreen: View {
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @Environment(\.presentationMode) var presentationMode
     @Binding var cur_screen: Screen
     @Binding var selectedDelay: TimeInterval  // bound to EditReminderScreen
@@ -131,7 +132,7 @@ struct CaretakerAlertSettingsScreen: View {
             }
 
             // Bottom nav bar (fixed)
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
     }
 }

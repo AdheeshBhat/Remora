@@ -11,6 +11,7 @@ import FirebaseAuth
 
 struct EditReminderScreen: View {
     @Environment(\.presentationMode) private var presentationMode
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @Binding var cur_screen: Screen
     @State var showReminderNameAlert: Bool = false
     @State var localTitle: String = ""
@@ -220,17 +221,34 @@ struct EditReminderScreen: View {
 
                     //SAVE BUTTON
                     Button(action: {
+                        let trimmedTitle = localTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmedTitle.isEmpty {
+                            showReminderNameAlert = true
+                            return
+                        }
+
+                        let activeUID = firestoreManager.activeUserUID
+                        guard !activeUID.isEmpty else {
+                            print("Cannot update reminder: active user UID is empty")
+                            return
+                        }
+
                         // For repeating reminders with past dates, update to today with selected time
                         var dateToSave = localDate
                         if localEditScreenRepeatSetting != "None" && localDate < Date() {
                             let calendar = Calendar.current
                             let timeComponents = calendar.dateComponents([.hour, .minute], from: localDate)
-                            dateToSave = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: Date()) ?? localDate
+                            dateToSave = calendar.date(
+                                bySettingHour: timeComponents.hour ?? 0,
+                                minute: timeComponents.minute ?? 0,
+                                second: 0,
+                                of: Date()
+                            ) ?? localDate
                         }
-                        
+
                         let repeatIntervalsDict: [String: Any]? = localCustomPatterns.isEmpty ? nil : ["days": localCustomPatterns.joined(separator: ",")]
                         let fields: [String: Any] = [
-                            "title": localTitle,
+                            "title": trimmedTitle,
                             "description": localDescription,
                             "priority": localEditScreenPriority,
                             "isLocked": localEditScreenIsLocked,
@@ -240,18 +258,22 @@ struct EditReminderScreen: View {
                             "date": Timestamp(date: dateToSave),
                             "caretakerAlertDelay": caretakerAlertDelay
                         ]
-                        
-                        // Update for all relevant users (senior + caretakers)
+
+                        // Update for all relevant users. For fake senior profiles, activeUID is the fake senior UID,
+                        // and FirestoreManager also updates the caretaker copy.
                         firestoreManager.updateReminderFields(
                             dateCreated: reminderID,
                             fields: fields
                         ) { success in
-                            if success {
-                                DispatchQueue.main.async { onUpdate?() }
+                            DispatchQueue.main.async {
+                                if success {
+                                    onUpdate?()
+                                    presentationMode.wrappedValue.dismiss()
+                                } else {
+                                    print("Failed to update reminder \(reminderID)")
+                                }
                             }
                         }
-                
-                        presentationMode.wrappedValue.dismiss()
                     }) {
                         Text("Save Changes")
                             .font(.title2)
@@ -268,7 +290,7 @@ struct EditReminderScreen: View {
                 .padding(.bottom, 20)
             }
             
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
         .background(Color(.systemBackground))
         .alert("Please type the reminder name first.", isPresented: $showReminderNameAlert) {

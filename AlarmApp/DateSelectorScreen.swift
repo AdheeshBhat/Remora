@@ -11,6 +11,7 @@ struct DateSelectorScreen: View {
     @Binding var selectedDate: Date
     @Binding var cur_screen: Screen
     @Environment(\.presentationMode) private var presentationMode
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @State private var localSelectedDate: Date
     let firestoreManager: FirestoreManager
 
@@ -61,7 +62,7 @@ struct DateSelectorScreen: View {
             cur_screen = .EditScreen
         }
         VStack {
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
     } //body ending
 }

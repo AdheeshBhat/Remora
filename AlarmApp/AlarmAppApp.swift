@@ -11,8 +11,9 @@ import FirebaseMessaging
 import UserNotifications
 import FirebaseAppCheck
 
+@MainActor
 class PreloadedReminders: ObservableObject {
-    @Published var preloadedReminders: [String: ReminderData]? = nil
+    @Published var preloadedReminders: [String: ReminderData] = [:]
 
 }
 
@@ -23,11 +24,13 @@ struct AlarmAppApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var appearance: AppearanceModel
     @State private var authHandle: AuthStateDidChangeListenerHandle?
-    @StateObject var preloadedReminders = PreloadedReminders()
+    @StateObject var preloadedReminders: PreloadedReminders
     
     init() {
         let appearanceModel = AppearanceModel()
         _appearance = StateObject(wrappedValue: appearanceModel)
+        var preloadedReminders = PreloadedReminders()
+        _preloadedReminders = StateObject(wrappedValue: preloadedReminders)
         setupNotificationDelegate() // Ensure delegate assigned early
     }
     

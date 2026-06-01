@@ -9,6 +9,7 @@ import SwiftUI
 
 struct PriorityFlow: View {
     @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @Binding var cur_screen: Screen
     
     var title: String
@@ -185,7 +186,7 @@ struct PriorityFlow: View {
                 .padding()
             }
 
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
         .onAppear {
             localPriority = priority

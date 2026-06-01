@@ -9,6 +9,7 @@ import SwiftUI
 
 struct CustomRepeatCalendarView: View {
     @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @Binding var cur_screen: Screen
     @State var title: String
     @State private var selectedDays: Set<Int> = []
@@ -135,7 +136,7 @@ struct CustomRepeatCalendarView: View {
         }
         
         VStack {
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
     }
 }

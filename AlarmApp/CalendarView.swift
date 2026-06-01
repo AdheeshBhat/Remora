@@ -294,6 +294,7 @@ struct CalendarView: View {
                                     cur_screen: $cur_screen,
                                     firestoreManager: firestoreManager
                                 )
+                                .environmentObject(preloadedReminders)
                             ) {
                                 HStack {
                                     Image(systemName: "arrow.left")
@@ -540,13 +541,11 @@ struct CalendarView: View {
             .padding(.horizontal)
             .padding(.bottom)
 
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
         .onAppear {
             calendarViewType = initialViewType
             isCalendarViewOn = true
-            
-            preloadedReminders.preloadedReminders = nil
             
             reloadReminders(forceRemote: false)
             
@@ -609,12 +608,14 @@ struct CalendarView: View {
     
     private func reloadReminders(forceRemote: Bool = false) {
         if forceRemote {
-            preloadedReminders.preloadedReminders = nil
+            preloadedReminders.preloadedReminders = [:]
         }
 
         if !forceRemote {
-            if let cached = preloadedReminders.preloadedReminders {
+            let cached = preloadedReminders.preloadedReminders
+            if !cached.isEmpty {
                 viewModel.loadReminders(from: cached)
+                preloadedReminders.preloadedReminders = cached
                 firestoreManager.getRemindersForUser { fetched in
                     guard let fetched = fetched else { return }
                     DispatchQueue.main.async {
@@ -628,6 +629,7 @@ struct CalendarView: View {
         firestoreManager.getRemindersForUser { fetched in
             guard let fetched = fetched else { return }
             DispatchQueue.main.async {
+                self.preloadedReminders.preloadedReminders = fetched
                 self.viewModel.loadReminders(from: fetched)
             }
         }

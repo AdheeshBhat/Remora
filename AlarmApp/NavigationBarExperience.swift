@@ -40,6 +40,7 @@ struct NavigationBarExperience: View {
                                     firestoreManager: firestoreManager
                                 )
                                 .environmentObject(appearance)
+                                .environmentObject(preloadedReminders)
                             ) {
                                 Image(systemName: "list.bullet")
                                     .font(.title)
@@ -123,7 +124,7 @@ struct NavigationBarExperience: View {
                             if cur_screen != .HomeScreen {
                                 // If we're navigating back to the calendar, force it to refresh
                                 if previousScreen == .CalendarScreen {
-                                    preloadedReminders.preloadedReminders = nil
+                                    preloadedReminders.preloadedReminders = [:]
                                     NotificationCenter.default.post(name: FirestoreManager.remindersChangedNotification, object: nil)
                                 }
                                 dismiss()

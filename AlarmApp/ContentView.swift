@@ -20,8 +20,9 @@ enum Screen {
 struct ContentView: View {
     @Environment(\.presentationMode) private var
         presentationMode: Binding<PresentationMode>
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @State public var cur_screen: Screen = .HomeScreen
-    @State private var isCaretaker: Bool = false
+    @State private var isCaretaker: Bool? = nil
     @ObservedObject private var notificationManager = NotificationManager.shared
     
     let firestoreManager = FirestoreManager()
@@ -31,19 +32,26 @@ struct ContentView: View {
         NavigationStack {
             Group {
                 if Auth.auth().currentUser == nil {
+                    // Not signed in
                     LoginScreen(cur_screen: $cur_screen)
-                } else if isCaretaker {
-                    CaretakerHomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                } else if let isCaretaker = isCaretaker {
+                    // Signed in and we know the role
+                    if isCaretaker {
+                        CaretakerHomeView(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+                            .environmentObject(preloadedReminders)
+                    } else {
+                        HomeView(cur_screen: $cur_screen, firestoreManager: FirestoreManager())
+                    }
                 } else {
-                    HomeView(cur_screen: $cur_screen, firestoreManager: FirestoreManager())
+                    // Signed in but still loading caretaker status
+                    ProgressView("Loading...")
                 }
             }
         }
-        
-        .onAppear {
+        .task {
+            // Ensure we fetch status when the view appears
             requestNotificationPermission()
             checkUserStatus()
-            //viewModel.addTestReminder()
         }
         .alert(item: $notificationManager.openedReminderDetail) { detail in
             Alert(

@@ -13,6 +13,7 @@ struct RepeatUntilFlow: View {
     var title: String = "New Reminder"
     @Binding var cur_screen: Screen
     @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @State var selectedDate: Date = Date()
     @Binding var repeatUntil: String
     @State private var repeatUntilOptionSelected: String
@@ -136,7 +137,7 @@ struct RepeatUntilFlow: View {
                 }
             }
 
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
     }
 }

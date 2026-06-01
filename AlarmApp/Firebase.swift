@@ -54,7 +54,7 @@ class FirestoreManager: ObservableObject {
     
     // Create a reminder
     func setReminder(reminderID: String, reminder: ReminderData, forUIDs: [String]? = nil) {
-        let targetUIDs = forUIDs ?? [activeUserUID]
+        let targetUIDs = (forUIDs ?? [activeUserUID]).filter { !$0.isEmpty }
         if targetUIDs.isEmpty { return }
         
         for uid in targetUIDs {
@@ -85,7 +85,7 @@ class FirestoreManager: ObservableObject {
         // Determine which UID to use: parameter > currentUID > logged-in user
         let userID = uid ?? currentUID ?? Auth.auth().currentUser?.uid
         
-        guard let userID = userID else {
+        guard let userID = userID, !userID.isEmpty else {
             DispatchQueue.main.async { completion(nil) }
             return
         }
@@ -251,12 +251,12 @@ class FirestoreManager: ObservableObject {
         self.checkIfCaretaker { isCaretaker in
             if isCaretaker {
                 let caretakerUID = Auth.auth().currentUser?.uid ?? ""
-                let UIDsToUpdate = [caretakerUID, activeUID]
+                let UIDsToUpdate = [caretakerUID, activeUID].filter { !$0.isEmpty }
                 self.performReminderUpdate(uids: UIDsToUpdate, dateCreated: dateCreated, fields: fields, completion: completion)
                 
             } else {
                 self.getLinkedCaretakersForSenior(seniorUID: activeUID) { caretakerUIDs in
-                    let UIDsToUpdate = [activeUID] + caretakerUIDs
+                    let UIDsToUpdate = ([activeUID] + caretakerUIDs).filter { !$0.isEmpty }
                     print("UIDsToUpdate: \(UIDsToUpdate)")
                     self.performReminderUpdate(uids: UIDsToUpdate, dateCreated: dateCreated, fields: fields, completion: completion)
                 }
@@ -270,8 +270,9 @@ class FirestoreManager: ObservableObject {
         fields: [String: Any],
         completion: @escaping (Bool) -> Void
     ) {
-        
-        if uids.isEmpty {
+        let validUIDs = uids.filter { !$0.isEmpty }
+
+        if validUIDs.isEmpty {
             completion(false)
             return
         }
@@ -279,7 +280,7 @@ class FirestoreManager: ObservableObject {
         let dispatchGroup = DispatchGroup()
         var success = true
         
-        for uid in uids {
+        for uid in validUIDs {
             dispatchGroup.enter()
             
             let docRef = db.collection("users")
@@ -715,6 +716,11 @@ class FirestoreManager: ObservableObject {
     
     // Gets current user's first name
     func getUserFirstName(forUID uid: String, completion: @escaping (String?) -> Void) {
+        guard !uid.isEmpty else {
+            completion(nil)
+            return
+        }
+
         db.collection("users").document(uid).getDocument { document, error in
             if let document = document, document.exists {
                 let firstName = document.data()?["firstName"] as? String
@@ -791,7 +797,13 @@ class FirestoreManager: ObservableObject {
     
     // Looks up UID for a given username
     func getUIDFromUsername(username: String, completion: @escaping (String?) -> Void) {
-        let ref = db.collection("usernameToUID").document(username)
+        let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else {
+            completion(nil)
+            return
+        }
+
+        let ref = db.collection("usernameToUID").document(normalized)
         ref.getDocument { doc, error in
             if let doc = doc, doc.exists,
                let data = doc.data(),
@@ -837,26 +849,105 @@ class FirestoreManager: ObservableObject {
             completion?(NSError(domain: "AuthError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No caretaker logged in"]))
             return
         }
-        
+
+        guard !seniorUID.isEmpty else {
+            completion?(NSError(domain: "FirebaseError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Senior UID cannot be empty."]))
+            return
+        }
+
+        let trimmedUsername = seniorUsername.trimmingCharacters(in: .whitespacesAndNewlines)
         let caretakerRef = db.collection("users")
             .document(caretaker.uid)
             .collection("linkedSeniors")
             .document(seniorUID)
-        
-        caretakerRef.setData(["username": seniorUsername]) { error in
-            if let error = error {
-                print("Error linking senior: \(error.localizedDescription)")
-            } else {
-                print("Linked senior \(seniorUsername) successfully")
-            }
-            completion?(error)
-        }
-        
+
         let seniorRef = db.collection("users").document(seniorUID)
-        seniorRef.updateData([
-            "LinkedCaretakers": FieldValue.arrayUnion([caretaker.uid])
-        ]) { seniorError in
-            completion?(seniorError)
+
+        seniorRef.getDocument { document, error in
+            if let error = error {
+                completion?(error)
+                return
+            }
+
+            let seniorData = document?.data() ?? [:]
+            let displayName = seniorData["displayName"] as? String
+                ?? seniorData["firstName"] as? String
+                ?? trimmedUsername
+            let isFakeSenior = seniorData["isFakeSenior"] as? Bool ?? false
+
+            let batch = self.db.batch()
+
+            batch.setData([
+                "username": trimmedUsername,
+                "displayName": displayName,
+                "isFakeSenior": isFakeSenior,
+                "linkedAt": FieldValue.serverTimestamp()
+            ], forDocument: caretakerRef, merge: true)
+
+            batch.setData([
+                "LinkedCaretakers": FieldValue.arrayUnion([caretaker.uid])
+            ], forDocument: seniorRef, merge: true)
+
+            batch.commit { batchError in
+                if let batchError = batchError {
+                    print("Error linking senior: \(batchError.localizedDescription)")
+                } else {
+                    print("Linked senior \(displayName) successfully")
+                }
+                completion?(batchError)
+            }
+        }
+    }
+
+    func createFakeSeniorProfile(name: String, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let caretaker = Auth.auth().currentUser else {
+            completion(.failure(NSError(domain: "AuthError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No caretaker logged in"])))
+            return
+        }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            completion(.failure(NSError(domain: "ValidationError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Please enter a senior name."])))
+            return
+        }
+
+        let fakeSeniorUID = "fakeSenior_\(caretaker.uid)_\(UUID().uuidString)"
+        let fakeUsername = "fake_\(fakeSeniorUID)"
+
+        let seniorRef = db.collection("users").document(fakeSeniorUID)
+        let caretakerLinkedRef = db.collection("users")
+            .document(caretaker.uid)
+            .collection("linkedSeniors")
+            .document(fakeSeniorUID)
+
+        let batch = db.batch()
+
+        batch.setData([
+            "uid": fakeSeniorUID,
+            "firstName": trimmedName,
+            "displayName": trimmedName,
+            "username": fakeUsername,
+            "isCaretaker": false,
+            "isFakeSenior": true,
+            "createdByCaretaker": caretaker.uid,
+            "LinkedCaretakers": [caretaker.uid],
+            "timezone": TimeZone.current.identifier,
+            "createdAt": FieldValue.serverTimestamp()
+        ], forDocument: seniorRef, merge: true)
+
+        batch.setData([
+            "username": fakeUsername,
+            "displayName": trimmedName,
+            "isFakeSenior": true,
+            "linkedAt": FieldValue.serverTimestamp()
+        ], forDocument: caretakerLinkedRef, merge: true)
+
+        batch.commit { error in
+            if let error = error {
+                completion(.failure(error))
+            } else {
+                completion(.success(fakeSeniorUID))
+            }
         }
     }
     
@@ -866,16 +957,65 @@ class FirestoreManager: ObservableObject {
             completion([])
             return
         }
-        
+
         db.collection("users").document(caretaker.uid)
             .collection("linkedSeniors")
             .getDocuments { snapshot, error in
-                if let docs = snapshot?.documents {
-                    let usernames = docs.compactMap { $0.data()["username"] as? String }
-                    completion(usernames)
-                } else {
+                if let error = error {
+                    print("Error fetching linked seniors: \(error)")
                     completion([])
+                    return
                 }
+
+                guard let docs = snapshot?.documents else {
+                    completion([])
+                    return
+                }
+
+                let names = docs.compactMap { doc -> String? in
+                    let data = doc.data()
+                    if let displayName = data["displayName"] as? String, !displayName.isEmpty {
+                        return displayName
+                    }
+                    return data["username"] as? String
+                }
+
+                completion(names)
+            }
+    }
+
+    func fetchLinkedSeniorSummaries(completion: @escaping ([(uid: String, displayName: String, username: String, isFakeSenior: Bool)]) -> Void) {
+        guard let caretaker = Auth.auth().currentUser else {
+            completion([])
+            return
+        }
+
+        db.collection("users").document(caretaker.uid)
+            .collection("linkedSeniors")
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("Error fetching linked senior summaries: \(error)")
+                    completion([])
+                    return
+                }
+
+                let summaries = snapshot?.documents.compactMap { doc -> (uid: String, displayName: String, username: String, isFakeSenior: Bool)? in
+                    let data = doc.data()
+                    let username = data["username"] as? String ?? ""
+                    let displayName = data["displayName"] as? String ?? username
+                    let isFakeSenior = data["isFakeSenior"] as? Bool ?? false
+
+                    guard !displayName.isEmpty else { return nil }
+
+                    return (
+                        uid: doc.documentID,
+                        displayName: displayName,
+                        username: username,
+                        isFakeSenior: isFakeSenior
+                    )
+                } ?? []
+
+                completion(summaries)
             }
     }
     
@@ -884,6 +1024,11 @@ class FirestoreManager: ObservableObject {
     //   - seniorUID: The UID of the senior.
     //   - completion: Closure called with array of caretaker UIDs.
     func getLinkedCaretakersForSenior(seniorUID: String, completion: @escaping ([String]) -> Void) {
+        guard !seniorUID.isEmpty else {
+            completion([])
+            return
+        }
+
         let seniorRef = db.collection("users").document(seniorUID)
         seniorRef.getDocument { document, error in
             if let data = document?.data(), let caretakers = data["LinkedCaretakers"] as? [String] {
@@ -894,60 +1039,175 @@ class FirestoreManager: ObservableObject {
         }
     }
     
-    // Unlink a senior from caretaker
+    // Unlink a senior from caretaker.
+    // If the senior is a caretaker-created fake profile, delete the fake senior profile completely.
     func unlinkSenior(username: String, completion: ((Error?) -> Void)? = nil) {
         guard let caretaker = Auth.auth().currentUser else {
             completion?(NSError(domain: "AuthError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No caretaker logged in"]))
             return
         }
-        
-        let ref = db.collection("users")
+
+        let normalizedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedUsername.isEmpty else {
+            completion?(NSError(domain: "ValidationError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Username cannot be empty."]))
+            return
+        }
+
+        let linkedSeniorsRef = db.collection("users")
             .document(caretaker.uid)
             .collection("linkedSeniors")
-        
-        // Find the document with this username
-        ref.whereField("username", isEqualTo: username).getDocuments { snapshot, error in
+
+        linkedSeniorsRef.whereField("username", isEqualTo: normalizedUsername).getDocuments { snapshot, error in
             if let error = error {
                 print("Error finding senior to unlink: \(error.localizedDescription)")
                 completion?(error)
                 return
             }
-            
+
             guard let docs = snapshot?.documents, !docs.isEmpty else {
-                print("No senior found with username: \(username)")
+                print("No senior found with username: \(normalizedUsername)")
                 completion?(NSError(domain: "FirebaseError", code: 1, userInfo: [NSLocalizedDescriptionKey: "No senior found with username"]))
                 return
             }
-            
+
             let group = DispatchGroup()
             var lastError: Error? = nil
-            
+
             for doc in docs {
+                let seniorUID = doc.documentID
+                let data = doc.data()
+                let isFakeSenior = data["isFakeSenior"] as? Bool ?? false
+
                 group.enter()
-                
-                doc.reference.delete { error in
-                    if let error = error {
-                        print("Error unlinking senior: \(error.localizedDescription)")
-                        lastError = error
-                    } else {
-                        print("Successfully unlinked senior: \(username)")
+
+                if isFakeSenior {
+                    self.deleteFakeSeniorProfile(
+                        seniorUID: seniorUID,
+                        caretakerUID: caretaker.uid,
+                        linkedSeniorDocumentRef: doc.reference
+                    ) { error in
+                        if let error = error {
+                            print("Error deleting fake senior profile: \(error.localizedDescription)")
+                            lastError = error
+                        } else {
+                            print("Deleted fake senior profile completely: \(normalizedUsername)")
+                        }
+                        group.leave()
                     }
-                    group.leave()
+                } else {
+                    doc.reference.delete { error in
+                        if let error = error {
+                            print("Error unlinking senior: \(error.localizedDescription)")
+                            lastError = error
+                            group.leave()
+                            return
+                        }
+
+                        self.cancelScheduledNotificationsForLink(
+                            caretakerUID: caretaker.uid,
+                            seniorUID: seniorUID
+                        ) { cancelError in
+                            if let cancelError = cancelError {
+                                print("Error cancelling scheduled notifications: \(cancelError.localizedDescription)")
+                                lastError = cancelError
+                            } else {
+                                print("Successfully unlinked senior: \(normalizedUsername)")
+                            }
+                            group.leave()
+                        }
+                    }
                 }
             }
-            
+
             group.notify(queue: .main) {
-                // After unlinking, cancel scheduled notifications for this caretaker-senior pair
-                self.cancelScheduledNotificationsForLink(
-                    caretakerUID: caretaker.uid,
-                    seniorUID: docs.first?.documentID ?? ""
-                ) { cancelError in
-                    if let cancelError = cancelError {
-                        print("Error cancelling scheduled notifications: \(cancelError.localizedDescription)")
-                    }
-                    
-                    completion?(lastError)
+                completion?(lastError)
+            }
+        }
+    }
+
+    private func deleteFakeSeniorProfile(
+        seniorUID: String,
+        caretakerUID: String,
+        linkedSeniorDocumentRef: DocumentReference,
+        completion: @escaping (Error?) -> Void
+    ) {
+        guard !seniorUID.isEmpty, !caretakerUID.isEmpty else {
+            completion(NSError(domain: "ValidationError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Senior UID and caretaker UID cannot be empty."]))
+            return
+        }
+
+        let seniorRef = db.collection("users").document(seniorUID)
+        let group = DispatchGroup()
+        var refsToDelete: [DocumentReference] = []
+        var lastError: Error? = nil
+
+        func collectSubcollection(_ collectionName: String) {
+            group.enter()
+            seniorRef.collection(collectionName).getDocuments { snapshot, error in
+                if let error = error {
+                    lastError = error
+                    group.leave()
+                    return
                 }
+
+                refsToDelete.append(contentsOf: snapshot?.documents.map { $0.reference } ?? [])
+                group.leave()
+            }
+        }
+
+        collectSubcollection("reminders")
+        collectSubcollection("linkedSeniors")
+        collectSubcollection("userSettings")
+
+        group.enter()
+        db.collection("scheduledNotifications")
+            .whereField("seniorId", isEqualTo: seniorUID)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    lastError = error
+                    group.leave()
+                    return
+                }
+
+                refsToDelete.append(contentsOf: snapshot?.documents.map { $0.reference } ?? [])
+                group.leave()
+            }
+
+        group.notify(queue: .main) {
+            refsToDelete.append(seniorRef)
+            refsToDelete.append(linkedSeniorDocumentRef)
+
+            let uniqueRefs = Dictionary(grouping: refsToDelete, by: { $0.path })
+                .compactMap { $0.value.first }
+
+            guard !uniqueRefs.isEmpty else {
+                completion(lastError)
+                return
+            }
+
+            let commitGroup = DispatchGroup()
+            var commitError: Error? = lastError
+
+            for chunkStart in stride(from: 0, to: uniqueRefs.count, by: 450) {
+                let chunkEnd = min(chunkStart + 450, uniqueRefs.count)
+                let chunk = Array(uniqueRefs[chunkStart..<chunkEnd])
+                let batch = self.db.batch()
+
+                for ref in chunk {
+                    batch.deleteDocument(ref)
+                }
+
+                commitGroup.enter()
+                batch.commit { error in
+                    if let error = error {
+                        commitError = error
+                    }
+                    commitGroup.leave()
+                }
+            }
+
+            commitGroup.notify(queue: .main) {
+                completion(commitError)
             }
         }
     }
@@ -1070,6 +1330,11 @@ class FirestoreManager: ObservableObject {
         seniorUID: String,
         completion: ((Error?) -> Void)? = nil
     ) {
+        guard !caretakerUID.isEmpty, !seniorUID.isEmpty else {
+            completion?(nil)
+            return
+        }
+
         self.db.collection("scheduledNotifications")
             .whereField("caretakerId", isEqualTo: caretakerUID)
             .getDocuments { snapshot, error in

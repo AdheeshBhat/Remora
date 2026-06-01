@@ -9,6 +9,8 @@ struct RemindersScreen: View {
     //@Environment(\.dismiss) var dismiss also works for back button
     @Environment(\.presentationMode) private var
         presentationMode: Binding<PresentationMode>
+    @EnvironmentObject var appearance: AppearanceModel
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @State private var navigate_to_home_screen : Bool = false
     @State private var notifications : Bool = false
     @State private var showCalendarView : Bool = false
@@ -57,7 +59,7 @@ struct RemindersScreen: View {
                 .background(Color.blue)
                 .frame(height: 2)
             footerToggles
-            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager)
+            NavigationBarExperience(cur_screen: $cur_screen, firestoreManager: firestoreManager).environmentObject(preloadedReminders)
         }
         .navigationDestination(isPresented: $showCalendarView) {
             calendarView
@@ -110,6 +112,7 @@ struct RemindersScreen: View {
                                 cur_screen: $cur_screen,
                                 firestoreManager: firestoreManager
                             )
+                            .environmentObject(preloadedReminders)
                         ) {
                             HStack {
                                 Image(systemName: "arrow.left")
@@ -365,6 +368,7 @@ struct RemindersScreen: View {
                 //storedShowCalendarView = newValue
                 
                 if newValue {
+                    preloadedReminders.preloadedReminders = remindersForUser
                     calendarViewType = filterPeriod == "today" ? "week" : filterPeriod
                 }
             }
@@ -386,6 +390,11 @@ struct RemindersScreen: View {
             initialViewType: $calendarViewType,
             firestoreManager: firestoreManager
         )
+        .environmentObject(preloadedReminders)
+        .environmentObject(appearance)
+        .onAppear {
+            preloadedReminders.preloadedReminders = remindersForUser
+        }
         .onDisappear {
             // When dismissing calendar, refresh list
             loadReminders()
@@ -500,6 +509,7 @@ struct RemindersScreen: View {
 // Represents one visible reminder instance
 
 struct ReminderRow: View {
+    @EnvironmentObject var preloadedReminders: PreloadedReminders
     @Binding var cur_screen: Screen
     var title: String
     var time: String
@@ -667,7 +677,7 @@ struct ReminderRow: View {
                             firestoreManager: firestoreManager,
                             reminderID: documentID,
                             onUpdate: onUpdate
-                        )) {
+                        ).environmentObject(preloadedReminders)) {
                             
                             HStack(spacing: 6) {
                                 Image(systemName: "pencil")
